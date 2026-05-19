@@ -77,14 +77,29 @@ def run_alerts(positions, mkt):
     # ── Earnings proximity ──────────────────────────────────────────────
     days_to_earn = (EARNINGS_DATE - date.today()).days
     if 0 < days_to_earn <= EARNINGS_WARN_DAYS:
+        earn_move   = price * 0.06
+        earn_urgent = days_to_earn <= 7
         alerts.append({
-            "level":   "RISK" if days_to_earn <= 7 else "WARN",
-            "emoji":   "🔴" if days_to_earn <= 7 else "📅",
-            "title":   f"Earnings in {days_to_earn} days (Jul 30)",
-            "detail":  (
-                f"AMZN reports Q2 on Jul 30. Options market prices in a ±6% move (~${price * 0.06:.0f}). "
-                f"Review any leg expiring after Jul 30 — especially Leg 3. "
-                f"Consider closing or rolling before the event."
+            "level": "RISK" if earn_urgent else "WARN",
+            "emoji": "🔴" if earn_urgent else "📅",
+            "title": f"Earnings in {days_to_earn} days (Jul 30)",
+            "detail": (
+                f"AMZN reports Q2 earnings on Jul 30. The options market is pricing in a "
+                f"±6% implied move (~${earn_move:.0f} per share). IV typically spikes into "
+                f"the event and collapses immediately after (IV crush), making short calls "
+                f"temporarily more expensive to buy back. Any leg whose expiry falls after "
+                f"Jul 30 carries full earnings risk — a bullish surprise could rapidly push "
+                f"AMZN through your strikes."
+            ),
+            "reco": (
+                f"  A) Roll to post-earnings expiry BEFORE Jul 30: sell the same (or "
+                f"higher) strike on the next monthly cycle to sidestep the event.\n"
+                f"  B) Close the leg 1–2 weeks before earnings while IV is still elevated "
+                f"— you'll pay more to close, but eliminate binary risk.\n"
+                f"  C) If keeping through earnings, buy a protective call $5–10 above "
+                f"each strike to cap upside loss (converts short call to a spread).\n"
+                f"  D) Do nothing only if AMZN is comfortably OTM and you are prepared "
+                f"to roll/defend quickly the morning after earnings."
             ),
         })
 
@@ -100,36 +115,84 @@ def run_alerts(positions, mkt):
         otm_pct   = (strike - price) / price * 100
 
         # Assignment risk
+        itm_dollars = abs(price - strike)
         if otm_pct < 0:
+            intrinsic   = itm_dollars * shares
             alerts.append({
                 "level":  "RISK",
                 "emoji":  "🔴",
                 "title":  f"IN THE MONEY — ${strike} Call ({leg})",
                 "detail": (
-                    f"AMZN at ${price} has moved above your ${strike} strike. "
-                    f"{shares} shares ({contracts} contracts) face assignment at expiry ({expiry}, {dte} DTE). "
-                    f"Act now: buy back the call or roll up/out to avoid forced sale."
+                    f"AMZN at ${price} has breached your ${strike} strike by "
+                    f"${itm_dollars:.2f}/sh (${intrinsic:,.0f} intrinsic value across "
+                    f"{contracts} contracts). The call is now deep-in-the-money and delta "
+                    f"is near 1.0 — every $1 AMZN rises costs you ~$1/sh to buy back. "
+                    f"Early assignment is possible on American-style options even before "
+                    f"expiry ({expiry}, {dte} DTE). You collected ${premium}/sh "
+                    f"(${premium * shares:,.0f} total) upfront — that partially offsets "
+                    f"the current loss, but the position needs immediate attention."
+                ),
+                "reco": (
+                    f"  A) Buy to close NOW: limits further damage. Net loss so far is "
+                    f"approximately ${max(0, itm_dollars - premium):.2f}/sh "
+                    f"(${max(0, (itm_dollars - premium) * shares):,.0f} total).\n"
+                    f"  B) Roll up & out: buy back this ${strike} call and sell a higher "
+                    f"strike (${strike + 5}–${strike + 15}) on a later expiry for a net "
+                    f"credit or small debit — buys time and moves the ceiling higher.\n"
+                    f"  C) Accept assignment only if you want to sell {shares} shares at "
+                    f"${strike} and are happy with that exit price. You keep all premium "
+                    f"collected but cap any further AMZN upside."
                 ),
             })
         elif otm_pct < ASSIGNMENT_ZONE_PCT:
+            gap_dollars = (strike - price)
             alerts.append({
                 "level":  "RISK",
                 "emoji":  "🔴",
                 "title":  f"Assignment risk — ${strike} Call ({leg})",
                 "detail": (
-                    f"AMZN at ${price} is only {otm_pct:.1f}% below your ${strike} strike "
-                    f"({shares} shares, {dte} DTE). "
-                    f"High assignment risk — consider rolling up or buying back."
+                    f"AMZN at ${price} is only {otm_pct:.1f}% (${gap_dollars:.2f}/sh) "
+                    f"below your ${strike} strike ({shares} shares, {dte} DTE). "
+                    f"At this distance the call delta is typically 0.45–0.55, meaning the "
+                    f"market assigns roughly 45–55% probability of finishing ITM. A single "
+                    f"strong session could push AMZN through the strike. You still have "
+                    f"${premium}/sh of premium cushion (${premium * shares:,.0f} total), "
+                    f"but that buffer is nearly consumed."
+                ),
+                "reco": (
+                    f"  A) Roll up & out today: buy back the ${strike} call and sell a "
+                    f"higher strike (${strike + 5}–${strike + 10}) on the next monthly "
+                    f"expiry. Target a net credit or at worst a small debit.\n"
+                    f"  B) Buy to close and wait: eliminates risk entirely; re-sell a new "
+                    f"covered call when AMZN settles or IV normalises.\n"
+                    f"  C) Hold but set a hard stop: if AMZN crosses ${strike - 1:.0f} "
+                    f"(1 point below strike), commit to rolling immediately — don't wait "
+                    f"for expiry to force the decision."
                 ),
             })
         elif otm_pct < WARN_ZONE_PCT:
+            gap_dollars = (strike - price)
             alerts.append({
                 "level":  "WARN",
                 "emoji":  "🟡",
                 "title":  f"Strike proximity warning — ${strike} Call ({leg})",
                 "detail": (
-                    f"AMZN at ${price} is {otm_pct:.1f}% from your ${strike} strike "
-                    f"({shares} shares, {dte} DTE). Monitor closely."
+                    f"AMZN at ${price} is {otm_pct:.1f}% (${gap_dollars:.2f}/sh) from "
+                    f"your ${strike} strike ({shares} shares, {dte} DTE). The call delta "
+                    f"is likely 0.30–0.45 — meaningful but not yet critical. You still have "
+                    f"${premium}/sh of premium collected (${premium * shares:,.0f} total) "
+                    f"as a buffer. The position needs active monitoring; another 2% move "
+                    f"triggers a red alert."
+                ),
+                "reco": (
+                    f"  A) No action required yet, but watch the tape. Check back at the "
+                    f"next 30-minute interval.\n"
+                    f"  B) If IV is elevated today (see header), this is a decent time to "
+                    f"roll up preemptively — you'll get a better credit for the new leg "
+                    f"than you would after further upside.\n"
+                    f"  C) Tighten your mental stop: plan the specific roll trade you'd "
+                    f"execute if AMZN reaches ${strike * 0.98:.2f} (2% OTM threshold) so "
+                    f"you can act fast without deliberating under pressure."
                 ),
             })
 
@@ -140,40 +203,109 @@ def run_alerts(positions, mkt):
                 "emoji":  "🟡",
                 "title":  f"Roll window — ${strike} Call ({leg}, {dte} DTE)",
                 "detail": (
-                    f"At {dte} days to expiry, theta decay is accelerating. "
-                    f"Consider rolling to next month to capture more premium. "
-                    f"Original premium: ${premium}/sh (${premium * shares:,.0f} total)."
+                    f"At {dte} DTE, theta decay is in its steepest phase — roughly 50–60% "
+                    f"of remaining extrinsic value will evaporate over the next two weeks. "
+                    f"You originally collected ${premium}/sh (${premium * shares:,.0f} "
+                    f"total). The current buyback cost is likely much lower than that, "
+                    f"meaning the bulk of your profit is already locked in. Holding to "
+                    f"expiry captures the last few cents of extrinsic value but introduces "
+                    f"gamma risk — the call becomes increasingly sensitive to sudden price "
+                    f"moves as expiry nears."
+                ),
+                "reco": (
+                    f"  A) Roll now (preferred at 21 DTE): buy back the ${strike} call "
+                    f"and sell the same strike (or higher if AMZN has rallied) for the "
+                    f"next monthly expiry. A net credit of $0.50–$1.50/sh is typical.\n"
+                    f"  B) Close and re-evaluate: buy back today, wait a few sessions for "
+                    f"AMZN to move, then sell a fresh covered call at a better strike or "
+                    f"higher IV.\n"
+                    f"  C) Hold to expiry only if the strike is comfortably OTM (>5%) and "
+                    f"you have no near-term catalyst risk (check earnings overlap above). "
+                    f"Commit to rolling immediately if AMZN presses the strike."
                 ),
             })
 
         # Earnings overlap
         if days_to_earn > 0 and dte >= days_to_earn:
+            earn_move      = price * 0.06
+            breach_price   = price + earn_move
             alerts.append({
                 "level":  "WARN",
                 "emoji":  "📅",
                 "title":  f"Earnings within leg window — ${strike} Call ({leg})",
                 "detail": (
-                    f"Jul 30 earnings falls before your {expiry} expiry. "
-                    f"A ±6% move at earnings (~${price * 0.06:.0f}) could breach your ${strike} strike."
+                    f"Jul 30 earnings falls before your {expiry} expiry, so this leg "
+                    f"carries full binary earnings risk. The options market's implied move "
+                    f"is ±6% (~${earn_move:.0f}/sh), which would put AMZN at "
+                    f"~${breach_price:.0f} on a bullish print — "
+                    f"{'ABOVE' if breach_price >= strike else f'still {strike - breach_price:.0f} pts below'} "
+                    f"your ${strike} strike. Additionally, IV typically spikes 30–50% in "
+                    f"the week before earnings, making the call more expensive to buy back "
+                    f"right now. After earnings, IV collapses, so the call rapidly loses "
+                    f"extrinsic value — but by then the damage from intrinsic value "
+                    f"(if ITM) is already done."
+                ),
+                "reco": (
+                    f"  A) Roll to post-earnings expiry (e.g., Aug/Sep) at the same or "
+                    f"higher strike before Jul 28 — you'll capture elevated pre-earnings "
+                    f"IV in the credit you receive.\n"
+                    f"  B) Close the leg 1–2 weeks before Jul 30: yes, you pay elevated "
+                    f"IV, but you eliminate the gap-risk entirely.\n"
+                    f"  C) Convert to a spread: buy a call at ${strike + 10} to cap your "
+                    f"maximum loss. Costs ~$0.50–$1.50/sh but limits a runaway scenario.\n"
+                    f"  D) Hold only if ${strike} is >8% OTM AND you have a roll plan "
+                    f"ready to execute on the open on Jul 31."
                 ),
             })
 
     # ── Daily drop ──────────────────────────────────────────────────────
     if mkt["change_pct"] <= -DROP_ALERT_PCT:
+        drop_dollars = mkt["prev_close"] - price
         alerts.append({
             "level":  "WARN",
             "emoji":  "📉",
             "title":  f"AMZN down {mkt['change_pct']:.1f}% today",
             "detail": (
-                f"Sharp drop from ${mkt['prev_close']} to ${price}. "
-                f"Your short calls have gained value (good for you). "
-                f"Consider buying back to lock in gains if the move feels overdone."
+                f"AMZN dropped ${drop_dollars:.2f}/sh ({mkt['change_pct']:.1f}%) from "
+                f"${mkt['prev_close']} to ${price}. Because you are short calls, this move "
+                f"works in your favour — the calls you sold are now worth significantly "
+                f"less, so your unrealised P&L on the short legs has improved. "
+                f"However, sharp drops can be followed by fast recoveries (dead-cat "
+                f"bounces), and elevated IV from the sell-off makes calls temporarily "
+                f"pricier to buy back than they'll be once volatility subsides."
+            ),
+            "reco": (
+                f"  A) Buy back to lock in profits: if the call has lost 50–80% of its "
+                f"value since you sold it, closing now captures most of the premium "
+                f"without waiting for expiry. Re-sell at a higher strike once AMZN "
+                f"stabilises.\n"
+                f"  B) Hold if conviction is low: the drop may be a temporary move. "
+                f"Monitor the next session — if AMZN bounces hard, your calls will "
+                f"regain value quickly.\n"
+                f"  C) Check your strikes: re-verify all OTM percentages in the "
+                f"Positions section below. A big drop widens your safety margin — "
+                f"confirm you are still comfortable with each strike level."
             ),
         })
 
     return alerts
 
 # ── EMAIL ─────────────────────────────────────────────────────────────────
+def _wrap(text, width=72, indent="     "):
+    """Wrap a paragraph to `width` chars, preserving explicit newlines."""
+    import textwrap
+    out = []
+    for paragraph in text.split("\n"):
+        if paragraph.strip() == "":
+            out.append("")
+        else:
+            wrapped = textwrap.fill(paragraph, width=width,
+                                    initial_indent=indent,
+                                    subsequent_indent=indent + "  ")
+            out.append(wrapped)
+    return "\n".join(out)
+
+
 def build_email(alerts, positions, mkt):
     price      = mkt["price"]
     change_pct = mkt["change_pct"]
@@ -188,8 +320,9 @@ def build_email(alerts, positions, mkt):
         f"AMZN ${price} ({sign}{change_pct}%) · {len(alerts)} alert{'s' if len(alerts) != 1 else ''}"
     )
 
-    # Plain text body
-    divider = "─" * 52
+    divider     = "─" * 72
+    thin_divider = "·" * 72
+
     lines = [
         "AMZN COVERED CALL MONITOR",
         divider,
@@ -200,19 +333,38 @@ def build_email(alerts, positions, mkt):
         divider,
     ]
 
+    def render_alert(a):
+        block = [
+            f"  {a['emoji']}  {a['title']}",
+            "",
+            "     WHAT'S HAPPENING",
+            _wrap(a["detail"]),
+        ]
+        if a.get("reco"):
+            block += [
+                "",
+                "     RECOMMENDED ACTIONS",
+                _wrap(a["reco"]),
+            ]
+        block.append("")
+        return block
+
     if not alerts:
         lines.append("  ✅  No alerts — all positions within normal parameters.")
     else:
         if risk_alerts:
-            lines.append(f"\n  🔴  {len(risk_alerts)} ACTION REQUIRED\n")
+            lines += ["", f"  🔴  {len(risk_alerts)} ACTION REQUIRED", divider]
             for a in risk_alerts:
-                lines += [f"  {a['emoji']}  {a['title']}", f"     {a['detail']}", ""]
+                lines += render_alert(a)
+                lines.append(thin_divider)
         if warn_alerts:
-            lines.append(f"\n  🟡  {len(warn_alerts)} WARNING{'S' if len(warn_alerts)>1 else ''}\n")
+            lines += ["", f"  🟡  {len(warn_alerts)} WARNING{'S' if len(warn_alerts)>1 else ''}", divider]
             for a in warn_alerts:
-                lines += [f"  {a['emoji']}  {a['title']}", f"     {a['detail']}", ""]
+                lines += render_alert(a)
+                lines.append(thin_divider)
 
     lines += [
+        "",
         divider,
         "  OPEN POSITIONS",
         divider,
@@ -221,9 +373,12 @@ def build_email(alerts, positions, mkt):
         dte    = days_to_expiry(pos["expiry"])
         otm    = (pos["strike"] - price) / price * 100
         total  = pos["premium"] * pos["contracts"] * 100
+        itm_tag = "  ⚠ ITM" if otm < 0 else ""
         lines += [
-            f"  ${pos['strike']} Call · {pos['leg'].upper()} · {pos['contracts']} contracts ({pos['contracts']*100} shares)",
-            f"     Expiry: {pos['expiry']} ({dte} DTE)  |  Premium: ${pos['premium']}/sh (${total:,.0f} total)  |  OTM: {otm:+.1f}%",
+            f"  ${pos['strike']} Call · {pos['leg'].upper()} · {pos['contracts']} contracts "
+            f"({pos['contracts']*100} shares){itm_tag}",
+            f"     Expiry: {pos['expiry']} ({dte} DTE)  |  "
+            f"Premium: ${pos['premium']}/sh (${total:,.0f} total)  |  OTM: {otm:+.1f}%",
             "",
         ]
 
@@ -232,7 +387,7 @@ def build_email(alerts, positions, mkt):
         "  To update positions: edit positions.json in your GitHub repo.",
         "  To silence an alert type: edit thresholds in monitor.py.",
         divider,
-        "  CALL/DESK · github.com/[your-repo]/amzn-call-monitor",
+        "  CALL/DESK · github.com/zgkmail/amzn-call-monitor",
     ]
 
     return subject, "\n".join(lines)
