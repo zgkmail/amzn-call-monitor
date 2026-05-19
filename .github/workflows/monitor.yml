@@ -1,0 +1,30 @@
+name: AMZN Covered Call Monitor
+
+on:
+  schedule:
+    # Runs every 30 minutes Mon–Fri during US market hours (9:30am–4:30pm ET = 13:30–20:30 UTC)
+    - cron: "0,30 13-20 * * 1-5"
+  workflow_dispatch:  # allows manual trigger from GitHub UI anytime
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install yfinance
+
+      - name: Run monitor
+        env:
+          GMAIL_FROM:    ${{ secrets.GMAIL_FROM }}
+          GMAIL_APP_PASS: ${{ secrets.GMAIL_APP_PASS }}
+        run: python monitor.py
