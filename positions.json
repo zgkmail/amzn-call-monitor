@@ -1,0 +1,29 @@
+[
+  {
+    "leg": "1m",
+    "contracts": 4,
+    "strike": 275,
+    "expiry": "2026-06-20",
+    "premium": 4.20,
+    "option_symbol": "AMZN260620C00275000",
+    "notes": "Leg 1 — 1-month expiration"
+  },
+  {
+    "leg": "2m",
+    "contracts": 4,
+    "strike": 280,
+    "expiry": "2026-07-18",
+    "premium": 6.50,
+    "option_symbol": "AMZN260718C00280000",
+    "notes": "Leg 2 — 2-month expiration"
+  },
+  {
+    "leg": "3m",
+    "contracts": 4,
+    "strike": 285,
+    "expiry": "2026-08-15",
+    "premium": 8.80,
+    "option_symbol": "AMZN260815C00285000",
+    "notes": "Leg 3 — 3-month expiration, spans Jul 30 earnings"
+  }
+]
