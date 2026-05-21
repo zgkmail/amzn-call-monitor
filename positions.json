@@ -2,10 +2,10 @@
   {
     "leg": "1m",
     "contracts": 4,
-    "strike": 275,
-    "expiry": "2026-06-20",
-    "premium": 4.20,
-    "option_symbol": "AMZN260620C00275000",
+    "strike": 280,
+    "expiry": "2026-06-26",
+    "premium": 4.60,
+    "option_symbol": "AMZN2626F280",
     "notes": "Leg 1 — 1-month expiration"
   },
   {
