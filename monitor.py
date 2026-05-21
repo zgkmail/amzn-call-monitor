@@ -19,7 +19,7 @@ GMAIL_TO      = "zgkmail@gmail.com"
 GMAIL_FROM    = os.environ.get("GMAIL_FROM")      # set in GitHub Secrets
 GMAIL_PASS    = os.environ.get("GMAIL_APP_PASS")  # set in GitHub Secrets
 TRADIER_TOKEN = os.environ.get("TRADIER_TOKEN")   # set in GitHub Secrets
-TRADIER_BASE  = "https://api.tradier.com/v1"
+TRADIER_BASE  = "https://sandbox.tradier.com/v1"
 POSITIONS_FILE = "positions.json"
 
 # Alert thresholds
