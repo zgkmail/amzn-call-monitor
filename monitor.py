@@ -8,16 +8,18 @@ import json
 import os
 import smtplib
 import sys
+import urllib.parse
+import urllib.request
 from datetime import datetime, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-
-import yfinance as yf
 
 # ── CONFIG ────────────────────────────────────────────────────────────────
 GMAIL_TO      = "zgkmail@gmail.com"
 GMAIL_FROM    = os.environ.get("GMAIL_FROM")      # set in GitHub Secrets
 GMAIL_PASS    = os.environ.get("GMAIL_APP_PASS")  # set in GitHub Secrets
+TRADIER_TOKEN = os.environ.get("TRADIER_TOKEN")   # set in GitHub Secrets
+TRADIER_BASE  = "https://api.tradier.com/v1"
 POSITIONS_FILE = "positions.json"
 
 # Alert thresholds
@@ -34,8 +36,63 @@ def load_positions():
     with open(POSITIONS_FILE) as f:
         return json.load(f)
 
-# ── MARKET DATA (Yahoo Finance) ───────────────────────────────────────────
+# ── MARKET DATA ───────────────────────────────────────────────────────────
 def get_market_data():
+    if TRADIER_TOKEN:
+        print("Using Tradier API for market data.")
+        return _get_market_data_tradier()
+    print("TRADIER_TOKEN not set — falling back to Yahoo Finance (delayed).")
+    return _get_market_data_yfinance()
+
+
+def _tradier_get(path, params=None):
+    url = TRADIER_BASE + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {TRADIER_TOKEN}",
+        "Accept":        "application/json",
+    })
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def _get_market_data_tradier():
+    # Real-time quote
+    data  = _tradier_get("/markets/quotes", {"symbols": "AMZN", "greeks": "false"})
+    quote = data["quotes"]["quote"]
+    # `last` is None outside market hours; fall back to close
+    last       = quote.get("last") or quote.get("close") or quote["prevclose"]
+    price      = round(float(last), 2)
+    prev_close = round(float(quote["prevclose"]), 2)
+    change_pct = round((price - prev_close) / prev_close * 100, 2)
+
+    # IV from nearest-expiry ATM call via options chain
+    try:
+        exps    = _tradier_get("/markets/options/expirations", {"symbol": "AMZN"})
+        exp     = exps["expirations"]["date"][0]
+        chain   = _tradier_get("/markets/options/chains",
+                               {"symbol": "AMZN", "expiration": exp, "greeks": "true"})
+        options = chain["options"]["option"]
+        calls   = [o for o in options if o["option_type"] == "call"]
+        atm     = min(calls, key=lambda o: abs(float(o["strike"]) - price))
+        greeks  = atm.get("greeks") or {}
+        raw_iv  = greeks.get("mid_iv") or atm.get("iv")
+        iv      = round(float(raw_iv) * 100, 1) if raw_iv else None
+    except Exception:
+        iv = None
+
+    return {
+        "price":      price,
+        "prev_close": prev_close,
+        "change_pct": change_pct,
+        "iv":         iv,
+    }
+
+
+def _get_market_data_yfinance():
+    import yfinance as yf
+
     ticker = yf.Ticker("AMZN")
     info   = ticker.fast_info
     hist   = ticker.history(period="2d")
@@ -44,7 +101,6 @@ def get_market_data():
     prev_close = round(hist["Close"].iloc[-2], 2) if len(hist) >= 2 else price
     change_pct = round((price - prev_close) / prev_close * 100, 2)
 
-    # IV approximation via options (nearest expiry ATM call)
     try:
         exp_dates = ticker.options
         if exp_dates:

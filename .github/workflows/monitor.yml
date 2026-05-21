@@ -25,6 +25,7 @@ jobs:
 
       - name: Run monitor
         env:
-          GMAIL_FROM:    ${{ secrets.GMAIL_FROM }}
+          GMAIL_FROM:     ${{ secrets.GMAIL_FROM }}
           GMAIL_APP_PASS: ${{ secrets.GMAIL_APP_PASS }}
+          TRADIER_TOKEN:  ${{ secrets.TRADIER_TOKEN }}
         run: python monitor.py
