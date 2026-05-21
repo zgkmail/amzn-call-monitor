@@ -8,6 +8,8 @@ import json
 import os
 import smtplib
 import sys
+import urllib.parse
+import urllib.request
 from datetime import datetime, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -18,23 +20,71 @@ import yfinance as yf
 GMAIL_TO      = "zgkmail@gmail.com"
 GMAIL_FROM    = os.environ.get("GMAIL_FROM")      # set in GitHub Secrets
 GMAIL_PASS    = os.environ.get("GMAIL_APP_PASS")  # set in GitHub Secrets
+TRADIER_TOKEN = os.environ.get("TRADIER_TOKEN")   # set in GitHub Secrets (optional)
+TRADIER_BASE  = "https://sandbox.tradier.com/v1"
 POSITIONS_FILE = "positions.json"
 
 # Alert thresholds
-ASSIGNMENT_ZONE_PCT   = 2.0   # alert if strike is within 2% of spot
-WARN_ZONE_PCT         = 4.0   # warning if strike is within 4% of spot
-ROLL_DTE_TRIGGER      = 21    # alert when days-to-expiry <= this
-DROP_ALERT_PCT        = 5.0   # alert if AMZN drops this % in one day
-EARNINGS_DATE         = date(2026, 7, 30)
-EARNINGS_WARN_DAYS    = 14    # start warning this many days before earnings
+ASSIGNMENT_ZONE_PCT = 2.0   # alert if strike is within 2% of spot
+WARN_ZONE_PCT       = 4.0   # warning if strike is within 4% of spot
+ROLL_DTE_TRIGGER    = 21    # alert when days-to-expiry <= this
+LOSS_MULTIPLE       = 2.0   # alert if current option ask >= X times premium sold
+BUY_BACK_PCT        = 50.0  # alert when call has lost this % of value (profit lock-in)
+DROP_ALERT_PCT      = 5.0   # alert if AMZN drops this % in one day
+EARNINGS_DATE       = date(2026, 7, 30)
+EARNINGS_WARN_DAYS  = 14    # start warning this many days before earnings
 
 # ── LOAD POSITIONS ────────────────────────────────────────────────────────
 def load_positions():
     with open(POSITIONS_FILE) as f:
         return json.load(f)
 
-# ── MARKET DATA (Yahoo Finance) ───────────────────────────────────────────
+# ── MARKET DATA ───────────────────────────────────────────────────────────
 def get_market_data():
+    if TRADIER_TOKEN:
+        print("Using Tradier API for market data.")
+        return _get_market_data_tradier()
+    print("TRADIER_TOKEN not set — using Yahoo Finance for market data (delayed).")
+    return _get_market_data_yfinance()
+
+
+def _tradier_get(path, params=None):
+    url = TRADIER_BASE + path
+    if params:
+        url += "?" + urllib.parse.urlencode(params)
+    req = urllib.request.Request(url, headers={
+        "Authorization": f"Bearer {TRADIER_TOKEN}",
+        "Accept":        "application/json",
+    })
+    with urllib.request.urlopen(req, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def _get_market_data_tradier():
+    data  = _tradier_get("/markets/quotes", {"symbols": "AMZN", "greeks": "false"})
+    quote = data["quotes"]["quote"]
+    last       = quote.get("last") or quote.get("close") or quote["prevclose"]
+    price      = round(float(last), 2)
+    prev_close = round(float(quote["prevclose"]), 2)
+    change_pct = round((price - prev_close) / prev_close * 100, 2)
+
+    try:
+        exps   = _tradier_get("/markets/options/expirations", {"symbol": "AMZN"})
+        exp    = exps["expirations"]["date"][0]
+        chain  = _tradier_get("/markets/options/chains",
+                              {"symbol": "AMZN", "expiration": exp, "greeks": "true"})
+        calls  = [o for o in chain["options"]["option"] if o["option_type"] == "call"]
+        atm    = min(calls, key=lambda o: abs(float(o["strike"]) - price))
+        greeks = atm.get("greeks") or {}
+        raw_iv = greeks.get("mid_iv") or atm.get("iv")
+        iv     = round(float(raw_iv) * 100, 1) if raw_iv else None
+    except Exception:
+        iv = None
+
+    return {"price": price, "prev_close": prev_close, "change_pct": change_pct, "iv": iv}
+
+
+def _get_market_data_yfinance():
     ticker = yf.Ticker("AMZN")
     info   = ticker.fast_info
     hist   = ticker.history(period="2d")
@@ -43,7 +93,6 @@ def get_market_data():
     prev_close = round(hist["Close"].iloc[-2], 2) if len(hist) >= 2 else price
     change_pct = round((price - prev_close) / prev_close * 100, 2)
 
-    # IV approximation via nearest-expiry ATM call
     try:
         exp_dates = ticker.options
         if exp_dates:
@@ -56,12 +105,42 @@ def get_market_data():
     except Exception:
         iv = None
 
-    return {
-        "price":      price,
-        "prev_close": prev_close,
-        "change_pct": change_pct,
-        "iv":         iv,
-    }
+    return {"price": price, "prev_close": prev_close, "change_pct": change_pct, "iv": iv}
+
+# ── OPTION QUOTES (Yahoo Finance) ─────────────────────────────────────────
+def get_option_quotes(positions):
+    """Fetch bid/ask/mid for each position from Yahoo Finance option chains.
+    Data is delayed (~15 min) but sufficient for monitoring purposes.
+    Returns {option_symbol: {bid, ask, mid}} or {} on failure."""
+    result    = {}
+    ticker    = yf.Ticker("AMZN")
+    available = set(ticker.options)
+
+    # Group by expiry to minimise API calls (one chain fetch per expiry date)
+    by_expiry = {}
+    for pos in positions:
+        if pos.get("option_symbol"):
+            by_expiry.setdefault(pos["expiry"], []).append(pos)
+
+    for exp, legs in by_expiry.items():
+        if exp not in available:
+            print(f"Warning: expiry {exp} not in Yahoo Finance chain — skipping option quotes.")
+            continue
+        try:
+            calls = ticker.option_chain(exp).calls
+            for pos in legs:
+                row = calls[calls["strike"] == float(pos["strike"])]
+                if row.empty:
+                    print(f"Warning: strike ${pos['strike']} not found in {exp} chain.")
+                    continue
+                bid = round(float(row["bid"].values[0]), 2)
+                ask = round(float(row["ask"].values[0]), 2)
+                mid = round((bid + ask) / 2, 2)
+                result[pos["option_symbol"]] = {"bid": bid, "ask": ask, "mid": mid}
+        except Exception as e:
+            print(f"Warning: could not fetch option chain for {exp}: {e}")
+
+    return result
 
 # ── DAYS TO EXPIRY ────────────────────────────────────────────────────────
 def days_to_expiry(expiry_str):
@@ -69,9 +148,11 @@ def days_to_expiry(expiry_str):
     return max(0, (exp - date.today()).days)
 
 # ── ALERT ENGINE ──────────────────────────────────────────────────────────
-def run_alerts(positions, mkt):
+def run_alerts(positions, mkt, option_quotes=None):
     alerts = []
     price  = mkt["price"]
+    if option_quotes is None:
+        option_quotes = {}
 
     # ── Earnings proximity ──────────────────────────────────────────────
     days_to_earn = (EARNINGS_DATE - date.today()).days
@@ -224,6 +305,70 @@ def run_alerts(positions, mkt):
                 ),
             })
 
+        # Live option P&L checks
+        symbol = pos.get("option_symbol")
+        if symbol and symbol in option_quotes:
+            oq          = option_quotes[symbol]
+            current_ask = oq["ask"]
+            current_mid = oq["mid"]
+
+            if current_ask and current_ask >= premium * LOSS_MULTIPLE:
+                loss_per_sh = round(current_ask - premium, 2)
+                total_loss  = round(loss_per_sh * shares, 2)
+                multiple    = round(current_ask / premium, 2)
+                alerts.append({
+                    "level": "RISK",
+                    "emoji": "🔴",
+                    "title": f"Call loss ×{multiple:.1f} — ${strike} Call ({leg})",
+                    "detail": (
+                        f"The {symbol} call you sold for ${premium}/sh is now quoted at "
+                        f"${current_ask:.2f}/sh (ask) — {multiple:.1f}× your original "
+                        f"premium. Buying back now costs ${loss_per_sh:.2f}/sh more than "
+                        f"you received, a net loss of ${total_loss:,.2f} across {contracts} "
+                        f"contracts. This typically signals AMZN has moved strongly toward "
+                        f"or through your ${strike} strike. The longer you wait, the more "
+                        f"delta and gamma will compound the loss if AMZN keeps rising."
+                    ),
+                    "reco": (
+                        f"  A) Buy to close immediately: cap the loss at ${total_loss:,.2f}. "
+                        f"Re-evaluate before selling a new covered call.\n"
+                        f"  B) Roll up & out: buy back this call and sell a higher strike "
+                        f"(${strike + 5}–${strike + 15}) on the next monthly expiry for a "
+                        f"net credit or small debit — moves your ceiling higher and buys "
+                        f"time for AMZN to pull back.\n"
+                        f"  C) Do NOT hold and hope without a defined exit plan — losses "
+                        f"on short calls are theoretically uncapped above the strike."
+                    ),
+                })
+            elif current_mid is not None:
+                profit_pct = (premium - current_mid) / premium * 100
+                if profit_pct >= BUY_BACK_PCT:
+                    locked_per_sh = round(premium - current_mid, 2)
+                    total_locked  = round(locked_per_sh * shares, 2)
+                    alerts.append({
+                        "level": "WARN",
+                        "emoji": "💰",
+                        "title": f"Profit lock-in opportunity — ${strike} Call ({leg})",
+                        "detail": (
+                            f"The {symbol} call you sold for ${premium}/sh is now worth "
+                            f"~${current_mid:.2f}/sh (mid). You can close for "
+                            f"${locked_per_sh:.2f}/sh profit (${total_locked:,.2f} total), "
+                            f"locking in {profit_pct:.0f}% of the maximum possible gain "
+                            f"with {dte} DTE still remaining. The last few cents of "
+                            f"extrinsic value are not worth the continued assignment risk."
+                        ),
+                        "reco": (
+                            f"  A) Buy to close now: pocket ${total_locked:,.2f} and free "
+                            f"up the position. Re-sell a new covered call at the same or "
+                            f"higher strike if AMZN has pulled back.\n"
+                            f"  B) Place a GTC buy-to-close order at ${current_mid * 0.5:.2f} "
+                            f"(50% of current mid) to auto-close if the call decays further "
+                            f"without requiring you to watch it.\n"
+                            f"  C) Hold only if you expect a near-term move in your favour "
+                            f"and are comfortable with assignment risk for {dte} more DTE."
+                        ),
+                    })
+
         # Earnings overlap
         if days_to_earn > 0 and dte >= days_to_earn:
             earn_move    = price * 0.06
@@ -303,11 +448,12 @@ def _wrap(text, width=72, indent="     "):
     return "\n".join(out)
 
 
-def build_email(alerts, positions, mkt):
+def build_email(alerts, positions, mkt, option_quotes=None):
     price      = mkt["price"]
     change_pct = mkt["change_pct"]
     iv         = mkt["iv"]
     sign       = "+" if change_pct >= 0 else ""
+    oq         = option_quotes or {}
 
     risk_alerts = [a for a in alerts if a["level"] == "RISK"]
     warn_alerts = [a for a in alerts if a["level"] == "WARN"]
@@ -360,12 +506,8 @@ def build_email(alerts, positions, mkt):
                 lines += render_alert(a)
                 lines.append(thin_divider)
 
-    lines += [
-        "",
-        divider,
-        "  OPEN POSITIONS",
-        divider,
-    ]
+    lines += ["", divider, "  OPEN POSITIONS", divider]
+
     for pos in positions:
         dte     = days_to_expiry(pos["expiry"])
         otm     = (pos["strike"] - price) / price * 100
@@ -377,9 +519,23 @@ def build_email(alerts, positions, mkt):
             f"  ${pos['strike']} Call · {pos['leg'].upper()} · {pos['contracts']} contracts "
             f"({shares} shares){itm_tag}",
             f"     Expiry: {pos['expiry']} ({dte} DTE)  |  "
-            f"Premium: ${premium}/sh (${total:,.0f} total)  |  OTM: {otm:+.1f}%",
-            "",
+            f"Sold: ${premium}/sh (${total:,.0f} total)  |  OTM: {otm:+.1f}%",
         ]
+        sym = pos.get("option_symbol")
+        if sym and sym in oq:
+            q          = oq[sym]
+            mid        = q["mid"]
+            ask        = q["ask"]
+            pnl_per_sh = round(premium - (mid if mid is not None else ask), 2)
+            pnl_total  = round(pnl_per_sh * shares, 2)
+            pnl_pct    = round(pnl_per_sh / premium * 100, 1) if premium else 0
+            pnl_sign   = "+" if pnl_per_sh >= 0 else ""
+            lines.append(
+                f"     Current: bid ${q['bid']:.2f} / ask ${ask:.2f} / mid ${mid:.2f}  |  "
+                f"P&L: {pnl_sign}${pnl_per_sh:.2f}/sh ({pnl_sign}{pnl_pct}%)  =  "
+                f"{pnl_sign}${pnl_total:,.0f} total  (Yahoo delayed)"
+            )
+        lines.append("")
 
     lines += [
         divider,
@@ -420,14 +576,20 @@ def main():
     mkt = get_market_data()
     print(f"AMZN: ${mkt['price']} ({mkt['change_pct']:+.2f}%)  IV: {mkt['iv']}%")
 
-    alerts = run_alerts(positions, mkt)
+    option_quotes = get_option_quotes(positions)
+    if option_quotes:
+        print(f"Option quotes fetched for: {list(option_quotes.keys())}")
+    else:
+        print("No option quotes available.")
+
+    alerts = run_alerts(positions, mkt, option_quotes)
     print(f"Alerts triggered: {len(alerts)} ({sum(1 for a in alerts if a['level']=='RISK')} risk, {sum(1 for a in alerts if a['level']=='WARN')} warn)")
 
     hour             = datetime.now().hour
     is_daily_summary = (hour >= 20)  # ~4pm ET = 20:00 UTC
 
     if alerts or is_daily_summary:
-        subject, body = build_email(alerts, positions, mkt)
+        subject, body = build_email(alerts, positions, mkt, option_quotes)
         send_email(subject, body)
     else:
         print("No alerts and not daily summary time — skipping email.")
