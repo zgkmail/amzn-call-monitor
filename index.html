@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AMZN Call Monitor</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    summary { list-style: none; }
+    summary::-webkit-details-marker { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinning { display: inline-block; animation: spin 0.9s linear infinite; }
+    /* toggle arrow on details open/close */
+    details .arr-c { display: inline; }
+    details .arr-o { display: none; }
+    details[open] .arr-c { display: none; }
+    details[open] .arr-o { display: inline; }
+  </style>
+  <!-- Tailwind dynamic-class safelist (hidden) -->
+  <div class="hidden
+    border-red-700 border-yellow-700 border-gray-700
+    border-red-600 border-yellow-600
+    bg-red-950 bg-yellow-950
+    text-red-300 text-yellow-300 text-red-400 text-yellow-400 text-green-400
+    text-red-400 text-gray-300 text-gray-600">
+  </div>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen antialiased">
+
+  <!-- Loading overlay -->
+  <div id="loading" class="fixed inset-0 bg-gray-950 z-50 flex items-center justify-center">
+    <div class="text-center">
+      <div class="w-10 h-10 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4 spinning"></div>
+      <p class="text-gray-400 text-sm">Fetching live data…</p>
+    </div>
+  </div>
+
+  <!-- Error banner -->
+  <div id="error-banner" class="hidden fixed top-0 inset-x-0 z-40 bg-red-950 border-b border-red-800 px-6 py-2.5 flex items-center gap-3">
+    <span class="text-red-400 text-base">⚠</span>
+    <span id="error-msg" class="text-red-300 text-sm flex-1"></span>
+    <button onclick="document.getElementById('error-banner').classList.add('hidden')"
+            class="text-red-500 hover:text-red-200 text-xl leading-none ml-2">✕</button>
+  </div>
+
+  <!-- Header -->
+  <header class="sticky top-0 z-30 bg-gray-900/95 backdrop-blur-sm border-b border-gray-800">
+    <div class="max-w-5xl mx-auto px-6 py-3 flex items-center justify-between">
+      <div class="flex items-baseline gap-4">
+        <span class="text-xs font-bold tracking-widest text-gray-500 uppercase">AMZN</span>
+        <span id="hdr-price" class="text-2xl font-mono font-bold text-white">—</span>
+        <span id="hdr-change" class="text-sm font-mono font-semibold text-gray-500">—</span>
+        <span id="hdr-iv" class="text-xs text-gray-600">IV —</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <span id="hdr-asof" class="text-xs text-gray-600">—</span>
+        <button id="btn-refresh" onclick="manualRefresh()"
+                class="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 border border-gray-700
+                       text-gray-300 hover:text-white px-3 py-1.5 rounded-md transition-colors disabled:opacity-50">
+          <span id="refresh-icon" class="text-sm leading-none">↻</span>
+          Refresh
+        </button>
+        <span id="countdown" class="text-xs text-gray-700 w-14 text-right tabular-nums">—</span>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 pt-6 pb-16 space-y-5">
+
+    <!-- Market-level alerts (earnings, big drop) -->
+    <div id="mkt-alerts" class="space-y-2"></div>
+
+    <!-- Portfolio summary strip -->
+    <div id="summary" class="hidden grid grid-cols-3 gap-3">
+      <div class="bg-gray-900 rounded-xl border border-gray-800 px-5 py-4 text-center">
+        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Total Premium</div>
+        <div id="sum-premium" class="text-xl font-mono font-bold text-white">—</div>
+      </div>
+      <div class="bg-gray-900 rounded-xl border border-gray-800 px-5 py-4 text-center">
+        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Current Value</div>
+        <div id="sum-value" class="text-xl font-mono font-bold text-gray-300">—</div>
+        <div id="sum-value-note" class="text-xs text-gray-600 mt-0.5"></div>
+      </div>
+      <div class="bg-gray-900 rounded-xl border border-gray-800 px-5 py-4 text-center">
+        <div class="text-xs text-gray-500 uppercase tracking-wider mb-1">Unrealised P&amp;L</div>
+        <div id="sum-pnl" class="text-xl font-mono font-bold">—</div>
+      </div>
+    </div>
+
+    <!-- Position cards -->
+    <div id="positions-grid" class="grid grid-cols-1 md:grid-cols-3 gap-5"></div>
+
+  </main>
+
+  <footer class="text-center text-xs text-gray-800 pb-8">
+    Data: Yahoo Finance (~15 min delayed) · Alerts via monitor.py
+  </footer>
+
+<script>
+const REFRESH_S = 60;
+let countdownTimer = null;
+
+// ── formatting helpers ────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function fmtMoney(n, decimals = 2) {
+  if (n === null || n === undefined) return '—';
+  return '$' + Math.abs(n).toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
+function fmtDate(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric',
+  });
+}
+
+// ── alert item (used inside cards and in mkt-alerts) ─────────────────────
+
+function alertItem(a) {
+  const risk  = a.level === 'RISK';
+  const bdr   = risk ? 'border-red-600'    : 'border-yellow-600';
+  const bg    = risk ? 'bg-red-950/50'     : 'bg-yellow-950/40';
+  const ttl   = risk ? 'text-red-300'      : 'text-yellow-300';
+  return `
+    <details class="border-l-4 ${bdr} ${bg} rounded-r-lg">
+      <summary class="flex items-center gap-2 px-4 py-3 cursor-pointer select-none">
+        <span>${a.emoji}</span>
+        <span class="${ttl} font-medium text-sm flex-1">${esc(a.title)}</span>
+        <span class="arr-c text-gray-600 text-xs">▸ plan</span>
+        <span class="arr-o text-gray-400 text-xs">▾ plan</span>
+      </summary>
+      <div class="px-4 pb-4 space-y-3">
+        <p class="text-gray-300 text-sm leading-relaxed">${esc(a.detail)}</p>
+        ${a.reco ? `
+          <div>
+            <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Roll Plan</p>
+            <pre class="whitespace-pre-wrap font-sans text-sm text-gray-300 leading-relaxed
+                        bg-gray-900/60 rounded-lg p-3">${esc(a.reco)}</pre>
+          </div>` : ''}
+      </div>
+    </details>`;
+}
+
+// ── position card ─────────────────────────────────────────────────────────
+
+function posCard(pos) {
+  const riskN = pos.alerts.filter(a => a.level === 'RISK').length;
+  const warnN = pos.alerts.filter(a => a.level === 'WARN').length;
+
+  const cardBorder = riskN > 0 ? 'border-red-700' : warnN > 0 ? 'border-yellow-700' : 'border-gray-700';
+
+  let badge;
+  if (riskN > 0) {
+    badge = `<span class="text-xs font-bold bg-red-700 text-white px-2 py-0.5 rounded-full">${riskN} RISK</span>`;
+  } else if (warnN > 0) {
+    badge = `<span class="text-xs font-bold bg-yellow-700 text-white px-2 py-0.5 rounded-full">${warnN} WARN</span>`;
+  } else {
+    badge = `<span class="flex items-center gap-1 text-xs text-green-400">
+               <span class="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"></span>OK
+             </span>`;
+  }
+
+  const otmCls = pos.otm_pct < 0 ? 'text-red-400'
+               : pos.otm_pct < 2  ? 'text-red-400'
+               : pos.otm_pct < 4  ? 'text-yellow-400'
+               : 'text-green-400';
+
+  const dteCls = pos.dte <= 7  ? 'text-red-400'
+               : pos.dte <= 21 ? 'text-yellow-400'
+               : 'text-gray-300';
+
+  let midHtml;
+  if (pos.current_mid !== null) {
+    midHtml = `<span class="font-mono text-gray-200">${fmtMoney(pos.current_mid)}</span>`
+            + `<span class="text-gray-600 text-xs"> bid ${fmtMoney(pos.current_bid)} / ask ${fmtMoney(pos.current_ask)}</span>`;
+  } else {
+    midHtml = `<span class="text-gray-600 text-xs italic">quote unavailable</span>`;
+  }
+
+  let pnlHtml;
+  if (pos.profit_pct !== null) {
+    const cls  = pos.profit_pct >= 0 ? 'text-green-400' : 'text-red-400';
+    const sign = pos.profit_pct >= 0 ? '+' : '';
+    const psign = pos.total_pnl >= 0 ? '+' : '-';
+    pnlHtml = `<span class="${cls} font-mono">`
+            + `${sign}${pos.profit_pct}% · ${sign}${fmtMoney(pos.profit_per_sh)}/sh · ${psign}${fmtMoney(pos.total_pnl)}`
+            + `</span>`;
+  } else {
+    pnlHtml = `<span class="text-gray-600">—</span>`;
+  }
+
+  const alertsHtml = pos.alerts.length > 0
+    ? `<div class="space-y-2">${pos.alerts.map(alertItem).join('')}</div>`
+    : `<p class="text-xs text-gray-700 italic">No active alerts</p>`;
+
+  return `
+    <div class="bg-gray-900 border ${cardBorder} rounded-xl p-5 flex flex-col gap-5">
+
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-xl font-bold text-white">$${pos.strike} Call</span>
+            <span class="text-xs text-gray-500 font-semibold tracking-wide">Leg ${pos.leg}</span>
+          </div>
+          <div class="text-sm text-gray-500 mt-0.5">
+            ${fmtDate(pos.expiry)} · <span class="${dteCls} font-mono font-semibold">${pos.dte} DTE</span>
+          </div>
+          <div class="text-xs text-gray-600 mt-0.5">${pos.contracts} contracts · ${pos.shares} shares</div>
+        </div>
+        ${badge}
+      </div>
+
+      <div class="space-y-2.5 text-sm">
+        <div class="flex justify-between items-baseline">
+          <span class="text-gray-500">OTM</span>
+          <span class="${otmCls} font-mono font-semibold">${pos.otm_pct >= 0 ? '+' : ''}${pos.otm_pct}%</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="text-gray-500">Premium</span>
+          <span class="text-gray-300 font-mono">
+            ${fmtMoney(pos.premium)}/sh
+            <span class="text-gray-600">· ${fmtMoney(pos.total_premium_collected)} total</span>
+          </span>
+        </div>
+        <div class="flex justify-between items-baseline gap-4">
+          <span class="text-gray-500 shrink-0">Current mid</span>
+          <span class="text-right leading-snug">${midHtml}</span>
+        </div>
+        <div class="flex justify-between items-baseline gap-4">
+          <span class="text-gray-500 shrink-0">P&amp;L</span>
+          <span class="text-right">${pnlHtml}</span>
+        </div>
+      </div>
+
+      <div class="border-t border-gray-800 pt-4 space-y-2">
+        ${alertsHtml}
+      </div>
+
+    </div>`;
+}
+
+// ── summary strip ─────────────────────────────────────────────────────────
+
+function renderSummary(positions) {
+  let premium = 0, value = 0, partial = false;
+  for (const p of positions) {
+    premium += p.total_premium_collected;
+    if (p.current_mid !== null) value += p.current_mid * p.shares;
+    else partial = true;
+  }
+  const pnl = partial ? null : premium - value;
+
+  document.getElementById('sum-premium').textContent = fmtMoney(premium, 0).replace('$', '$');
+  document.getElementById('sum-value').textContent   = partial ? fmtMoney(value, 0) : fmtMoney(value, 0);
+  document.getElementById('sum-value-note').textContent = partial ? '(some quotes unavailable)' : '';
+
+  const pnlEl = document.getElementById('sum-pnl');
+  if (pnl !== null) {
+    pnlEl.textContent = (pnl >= 0 ? '+$' : '-$') + Math.abs(pnl).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    pnlEl.className   = 'text-xl font-mono font-bold ' + (pnl >= 0 ? 'text-green-400' : 'text-red-400');
+  } else {
+    pnlEl.textContent = partial ? 'partial' : '—';
+    pnlEl.className   = 'text-xl font-mono font-bold text-gray-500';
+  }
+  document.getElementById('summary').classList.remove('hidden');
+}
+
+// ── main render ───────────────────────────────────────────────────────────
+
+function renderHeader(mkt, asOf) {
+  document.getElementById('hdr-price').textContent = '$' + mkt.price;
+  const chg = document.getElementById('hdr-change');
+  const sign = mkt.change_pct >= 0 ? '+' : '';
+  chg.textContent = sign + mkt.change_pct + '%';
+  chg.className = 'text-sm font-mono font-semibold ' + (mkt.change_pct >= 0 ? 'text-green-400' : 'text-red-400');
+  document.getElementById('hdr-iv').textContent   = mkt.iv !== null ? 'IV ' + mkt.iv + '%' : 'IV n/a';
+  document.getElementById('hdr-asof').textContent = 'as of ' + asOf;
+}
+
+function render(data) {
+  renderHeader(data.market, data.as_of);
+  document.getElementById('mkt-alerts').innerHTML     = data.mkt_alerts.map(alertItem).join('');
+  document.getElementById('positions-grid').innerHTML = data.positions.map(posCard).join('');
+  renderSummary(data.positions);
+}
+
+// ── data fetching & refresh ───────────────────────────────────────────────
+
+async function fetchAndRender() {
+  try {
+    const resp = await fetch('/api/status');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Server error');
+    document.getElementById('error-banner').classList.add('hidden');
+    render(data);
+  } catch (err) {
+    const msg = err.message === 'Failed to fetch'
+      ? 'Cannot reach server — is webapp.py running?'
+      : err.message;
+    document.getElementById('error-msg').textContent = msg;
+    document.getElementById('error-banner').classList.remove('hidden');
+    const asof = document.getElementById('hdr-asof');
+    if (asof.textContent && !asof.textContent.includes('(stale)'))
+      asof.textContent += ' (stale)';
+  } finally {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('refresh-icon').classList.remove('spinning');
+    document.getElementById('btn-refresh').disabled = false;
+  }
+}
+
+function startCountdown() {
+  clearInterval(countdownTimer);
+  let secs = REFRESH_S;
+  const el = document.getElementById('countdown');
+  el.textContent = 'in ' + secs + 's';
+  countdownTimer = setInterval(() => {
+    secs--;
+    el.textContent = 'in ' + secs + 's';
+    if (secs <= 0) {
+      clearInterval(countdownTimer);
+      el.textContent = '…';
+      startRefreshSpin();
+      fetchAndRender().then(startCountdown);
+    }
+  }, 1000);
+}
+
+function startRefreshSpin() {
+  document.getElementById('refresh-icon').classList.add('spinning');
+  document.getElementById('btn-refresh').disabled = true;
+}
+
+function manualRefresh() {
+  clearInterval(countdownTimer);
+  document.getElementById('countdown').textContent = '…';
+  startRefreshSpin();
+  fetchAndRender().then(startCountdown);
+}
+
+// initial load
+startRefreshSpin();
+fetchAndRender().then(startCountdown);
+</script>
+</body>
+</html>
