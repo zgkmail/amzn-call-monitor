@@ -94,17 +94,100 @@ def get_option_quotes(positions):
 
     return result
 
+# ── ROLL QUOTES ───────────────────────────────────────────────────────────
+def get_roll_quotes(positions):
+    """Fetch call chains for the next 2 expiry dates beyond each position's expiry.
+    Returns {expiry_str: {strike_float: {bid, ask, mid}}}"""
+    ticker    = yf.Ticker("AMZN")
+    available = list(ticker.options)
+    needed    = set()
+    for pos in positions:
+        after = [e for e in available if e > pos["expiry"]]
+        needed.update(after[:2])
+    result = {}
+    for exp in sorted(needed):
+        try:
+            calls = ticker.option_chain(exp).calls
+            result[exp] = {
+                float(r["strike"]): {
+                    "bid": round(float(r["bid"]), 2),
+                    "ask": round(float(r["ask"]), 2),
+                    "mid": round((float(r["bid"]) + float(r["ask"])) / 2, 2),
+                }
+                for _, r in calls.iterrows()
+            }
+        except Exception as e:
+            print(f"Warning: could not fetch roll chain for {exp}: {e}")
+    return result
+
 # ── DAYS TO EXPIRY ────────────────────────────────────────────────────────
 def days_to_expiry(expiry_str):
     exp = datetime.strptime(expiry_str, "%Y-%m-%d").date()
     return max(0, (exp - date.today()).days)
 
+# ── ROLL PLAN HELPER ──────────────────────────────────────────────────────
+def _roll_plan(pos, close_ask, roll_quotes, strike_delta=0):
+    """Return a formatted 3-line step-by-step roll plan, or None if data unavailable."""
+    expiry    = pos["expiry"]
+    strike    = pos["strike"]
+    contracts = pos["contracts"]
+    shares    = contracts * 100
+    after     = sorted(e for e in roll_quotes if e > expiry)
+    if not after:
+        return None
+    next_exp = after[0]
+    chain    = roll_quotes.get(next_exp, {})
+    target   = float(strike + strike_delta)
+    if not chain:
+        return None
+    closest = min(chain, key=lambda s: abs(s - target))
+    if abs(closest - target) > 12.5:
+        return None
+    q          = chain[closest]
+    new_dte    = days_to_expiry(next_exp)
+    net_per_sh = round(q["bid"] - close_ask, 2)
+    net_total  = round(net_per_sh * shares, 2)
+    sign       = "+" if net_per_sh >= 0 else ""
+    flow       = "credit" if net_per_sh >= 0 else "debit"
+    sym        = pos.get("option_symbol") or f"${strike} Call {expiry}"
+    return (
+        f"     Step 1 — Buy to close:  {sym}"
+        f" @ ${close_ask:.2f} ask  ->  -${close_ask * shares:,.0f} ({contracts} contracts)\n"
+        f"     Step 2 — Sell to open:  ${closest:.0f} Call  {next_exp} ({new_dte} DTE)"
+        f" @ ${q['bid']:.2f} bid  ->  +${q['bid'] * shares:,.0f} ({contracts} contracts)\n"
+        f"     Net: {sign}${abs(net_per_sh):.2f}/sh · {sign}${abs(net_total):,.0f} total"
+        f" ({flow})  [Yahoo ~15 min delayed]"
+    )
+
+def _build_roll_reco(pos, close_ask, roll_quotes, deltas, fallback, suffix=""):
+    """Build a lettered reco block with specific roll plans for each strike delta.
+    Falls back to generic text if no roll data is available."""
+    if not (close_ask and roll_quotes):
+        return fallback
+    parts  = []
+    letter = ord("A")
+    for delta in deltas:
+        plan = _roll_plan(pos, close_ask, roll_quotes, strike_delta=delta)
+        if plan:
+            label = f"${pos['strike']} (same)" if delta == 0 else f"${pos['strike'] + delta}"
+            parts.append(
+                f"  {chr(letter)}) Roll to {label} Call → next expiry:\n{plan}"
+            )
+            letter += 1
+    if not parts:
+        return fallback
+    if suffix:
+        parts.append(suffix.replace("__LETTER__", chr(letter)))
+    return "\n\n".join(parts)
+
 # ── ALERT ENGINE ──────────────────────────────────────────────────────────
-def run_alerts(positions, mkt, option_quotes=None):
+def run_alerts(positions, mkt, option_quotes=None, roll_quotes=None):
     alerts = []
     price  = mkt["price"]
     if option_quotes is None:
         option_quotes = {}
+    if roll_quotes is None:
+        roll_quotes = {}
 
     # ── Earnings proximity ──────────────────────────────────────────────
     days_to_earn = (EARNINGS_DATE - date.today()).days
@@ -145,11 +228,31 @@ def run_alerts(positions, mkt, option_quotes=None):
         shares    = contracts * 100
         dte       = days_to_expiry(expiry)
         otm_pct   = (strike - price) / price * 100
+        sym       = pos.get("option_symbol")
+        close_ask = option_quotes.get(sym, {}).get("ask") if sym else None
 
         # Assignment risk
         itm_dollars = abs(price - strike)
         if otm_pct < 0:
             intrinsic = itm_dollars * shares
+            reco = _build_roll_reco(
+                pos, close_ask, roll_quotes, [5, 10],
+                fallback=(
+                    f"  A) Buy to close NOW: limits further damage. Net loss so far is "
+                    f"approximately ${max(0, itm_dollars - premium):.2f}/sh "
+                    f"(${max(0, (itm_dollars - premium) * shares):,.0f} total).\n"
+                    f"  B) Roll up & out: buy back this ${strike} call and sell a higher "
+                    f"strike (${strike + 5}–${strike + 15}) on a later expiry for a net "
+                    f"credit or small debit — buys time and moves the ceiling higher.\n"
+                    f"  C) Accept assignment only if you want to sell {shares} shares at "
+                    f"${strike} and are happy with that exit price. You keep all premium "
+                    f"collected but cap any further AMZN upside."
+                ),
+                suffix=(
+                    f"  __LETTER__) Accept assignment only if you want to sell {shares} shares "
+                    f"at ${strike}. You keep all premium collected but cap further upside."
+                ),
+            )
             alerts.append({
                 "level": "RISK",
                 "emoji": "🔴",
@@ -164,20 +267,27 @@ def run_alerts(positions, mkt, option_quotes=None):
                     f"(${premium * shares:,.0f} total) upfront — that partially offsets "
                     f"the current loss, but the position needs immediate attention."
                 ),
-                "reco": (
-                    f"  A) Buy to close NOW: limits further damage. Net loss so far is "
-                    f"approximately ${max(0, itm_dollars - premium):.2f}/sh "
-                    f"(${max(0, (itm_dollars - premium) * shares):,.0f} total).\n"
-                    f"  B) Roll up & out: buy back this ${strike} call and sell a higher "
-                    f"strike (${strike + 5}–${strike + 15}) on a later expiry for a net "
-                    f"credit or small debit — buys time and moves the ceiling higher.\n"
-                    f"  C) Accept assignment only if you want to sell {shares} shares at "
-                    f"${strike} and are happy with that exit price. You keep all premium "
-                    f"collected but cap any further AMZN upside."
-                ),
+                "reco": reco,
             })
         elif otm_pct < ASSIGNMENT_ZONE_PCT:
             gap_dollars = strike - price
+            reco = _build_roll_reco(
+                pos, close_ask, roll_quotes, [5, 10],
+                fallback=(
+                    f"  A) Roll up & out today: buy back the ${strike} call and sell a "
+                    f"higher strike (${strike + 5}–${strike + 10}) on the next monthly "
+                    f"expiry. Target a net credit or at worst a small debit.\n"
+                    f"  B) Buy to close and wait: eliminates risk entirely; re-sell a new "
+                    f"covered call when AMZN settles or IV normalises.\n"
+                    f"  C) Hold but set a hard stop: if AMZN crosses ${strike - 1:.0f} "
+                    f"(1 point below strike), commit to rolling immediately — don't wait "
+                    f"for expiry to force the decision."
+                ),
+                suffix=(
+                    f"  __LETTER__) Buy to close only, no re-sell: eliminates all risk immediately.\n"
+                    f"  Hold but set a hard stop at ${strike - 1:.0f} — commit to rolling if breached."
+                ),
+            )
             alerts.append({
                 "level": "RISK",
                 "emoji": "🔴",
@@ -191,16 +301,7 @@ def run_alerts(positions, mkt, option_quotes=None):
                     f"${premium}/sh of premium cushion (${premium * shares:,.0f} total), "
                     f"but that buffer is nearly consumed."
                 ),
-                "reco": (
-                    f"  A) Roll up & out today: buy back the ${strike} call and sell a "
-                    f"higher strike (${strike + 5}–${strike + 10}) on the next monthly "
-                    f"expiry. Target a net credit or at worst a small debit.\n"
-                    f"  B) Buy to close and wait: eliminates risk entirely; re-sell a new "
-                    f"covered call when AMZN settles or IV normalises.\n"
-                    f"  C) Hold but set a hard stop: if AMZN crosses ${strike - 1:.0f} "
-                    f"(1 point below strike), commit to rolling immediately — don't wait "
-                    f"for expiry to force the decision."
-                ),
+                "reco": reco,
             })
         elif otm_pct < WARN_ZONE_PCT:
             gap_dollars = strike - price
@@ -230,6 +331,25 @@ def run_alerts(positions, mkt, option_quotes=None):
 
         # Roll trigger
         if 0 < dte <= ROLL_DTE_TRIGGER:
+            reco = _build_roll_reco(
+                pos, close_ask, roll_quotes, [0, 5],
+                fallback=(
+                    f"  A) Roll now (preferred at 21 DTE): buy back the ${strike} call "
+                    f"and sell the same strike (or higher if AMZN has rallied) for the "
+                    f"next monthly expiry. A net credit of $0.50–$1.50/sh is typical.\n"
+                    f"  B) Close and re-evaluate: buy back today, wait a few sessions for "
+                    f"AMZN to move, then sell a fresh covered call at a better strike or "
+                    f"higher IV.\n"
+                    f"  C) Hold to expiry only if the strike is comfortably OTM (>5%) and "
+                    f"you have no near-term catalyst risk (check earnings overlap above). "
+                    f"Commit to rolling immediately if AMZN presses the strike."
+                ),
+                suffix=(
+                    f"  __LETTER__) Close and re-evaluate: buy back today, wait a few sessions, "
+                    f"then re-sell at a better strike or higher IV.\n"
+                    f"  Hold to expiry only if >5% OTM and no catalyst risk."
+                ),
+            )
             alerts.append({
                 "level": "WARN",
                 "emoji": "🟡",
@@ -244,17 +364,7 @@ def run_alerts(positions, mkt, option_quotes=None):
                     f"gamma risk — the call becomes increasingly sensitive to sudden price "
                     f"moves as expiry nears."
                 ),
-                "reco": (
-                    f"  A) Roll now (preferred at 21 DTE): buy back the ${strike} call "
-                    f"and sell the same strike (or higher if AMZN has rallied) for the "
-                    f"next monthly expiry. A net credit of $0.50–$1.50/sh is typical.\n"
-                    f"  B) Close and re-evaluate: buy back today, wait a few sessions for "
-                    f"AMZN to move, then sell a fresh covered call at a better strike or "
-                    f"higher IV.\n"
-                    f"  C) Hold to expiry only if the strike is comfortably OTM (>5%) and "
-                    f"you have no near-term catalyst risk (check earnings overlap above). "
-                    f"Commit to rolling immediately if AMZN presses the strike."
-                ),
+                "reco": reco,
             })
 
         # Live option P&L checks
@@ -268,6 +378,24 @@ def run_alerts(positions, mkt, option_quotes=None):
                 loss_per_sh = round(current_ask - premium, 2)
                 total_loss  = round(loss_per_sh * shares, 2)
                 multiple    = round(current_ask / premium, 2)
+                reco = _build_roll_reco(
+                    pos, current_ask, roll_quotes, [5, 10],
+                    fallback=(
+                        f"  A) Buy to close immediately: cap the loss at ${total_loss:,.2f}. "
+                        f"Re-evaluate before selling a new covered call.\n"
+                        f"  B) Roll up & out: buy back this call and sell a higher strike "
+                        f"(${strike + 5}–${strike + 15}) on the next monthly expiry for a "
+                        f"net credit or small debit — moves your ceiling higher and buys "
+                        f"time for AMZN to pull back.\n"
+                        f"  C) Do NOT hold and hope without a defined exit plan — losses "
+                        f"on short calls are theoretically uncapped above the strike."
+                    ),
+                    suffix=(
+                        f"  __LETTER__) Buy to close only (no re-sell): locks the loss at "
+                        f"${total_loss:,.2f}.\n"
+                        f"  Do NOT hold and hope — losses on short calls are uncapped above the strike."
+                    ),
+                )
                 alerts.append({
                     "level": "RISK",
                     "emoji": "🔴",
@@ -281,16 +409,7 @@ def run_alerts(positions, mkt, option_quotes=None):
                         f"or through your ${strike} strike. The longer you wait, the more "
                         f"delta and gamma will compound the loss if AMZN keeps rising."
                     ),
-                    "reco": (
-                        f"  A) Buy to close immediately: cap the loss at ${total_loss:,.2f}. "
-                        f"Re-evaluate before selling a new covered call.\n"
-                        f"  B) Roll up & out: buy back this call and sell a higher strike "
-                        f"(${strike + 5}–${strike + 15}) on the next monthly expiry for a "
-                        f"net credit or small debit — moves your ceiling higher and buys "
-                        f"time for AMZN to pull back.\n"
-                        f"  C) Do NOT hold and hope without a defined exit plan — losses "
-                        f"on short calls are theoretically uncapped above the strike."
-                    ),
+                    "reco": reco,
                 })
             elif current_mid is not None:
                 profit_pct = (premium - current_mid) / premium * 100
@@ -534,7 +653,13 @@ def main():
     else:
         print("No option quotes available.")
 
-    alerts = run_alerts(positions, mkt, option_quotes)
+    roll_quotes = get_roll_quotes(positions)
+    if roll_quotes:
+        print(f"Roll quotes fetched for expiries: {list(roll_quotes.keys())}")
+    else:
+        print("No roll quotes available.")
+
+    alerts = run_alerts(positions, mkt, option_quotes, roll_quotes)
     print(f"Alerts triggered: {len(alerts)} ({sum(1 for a in alerts if a['level']=='RISK')} risk, {sum(1 for a in alerts if a['level']=='WARN')} warn)")
 
     hour             = datetime.now().hour

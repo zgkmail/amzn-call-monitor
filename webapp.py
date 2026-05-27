@@ -21,6 +21,7 @@ from monitor import (
     days_to_expiry,
     get_market_data,
     get_option_quotes,
+    get_roll_quotes,
     load_positions,
     run_alerts,
 )
@@ -82,10 +83,11 @@ def index():
 @app.route("/api/status")
 def api_status():
     try:
-        positions = load_positions()
-        mkt       = get_market_data()
-        quotes    = get_option_quotes(positions)
-        alerts    = run_alerts(positions, mkt, quotes)
+        positions    = load_positions()
+        mkt          = get_market_data()
+        quotes       = get_option_quotes(positions)
+        roll_quotes  = get_roll_quotes(positions)
+        alerts       = run_alerts(positions, mkt, quotes, roll_quotes)
 
         enriched   = [_enrich(p, mkt, quotes) for p in positions]
         by_leg     = {ep["leg"]: ep for ep in enriched}
