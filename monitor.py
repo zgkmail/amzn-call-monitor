@@ -538,7 +538,7 @@ def main():
     print(f"Alerts triggered: {len(alerts)} ({sum(1 for a in alerts if a['level']=='RISK')} risk, {sum(1 for a in alerts if a['level']=='WARN')} warn)")
 
     hour             = datetime.now().hour
-    is_daily_summary = (hour >= 20)  # ~4pm ET = 20:00 UTC
+    is_daily_summary = (hour == 20)  # ~4pm ET = 20:00 UTC (only the first end-of-day run)
 
     if alerts or is_daily_summary:
         subject, body = build_email(alerts, positions, mkt, option_quotes)
