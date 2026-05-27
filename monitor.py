@@ -126,13 +126,15 @@ def days_to_expiry(expiry_str):
     return max(0, (exp - date.today()).days)
 
 # ── ROLL PLAN HELPER ──────────────────────────────────────────────────────
-def _roll_plan(pos, close_ask, roll_quotes, strike_delta=0):
-    """Return a formatted 3-line step-by-step roll plan, or None if data unavailable."""
+def _roll_plan(pos, close_ask, roll_quotes, strike_delta=0, after_expiry=None):
+    """Return a formatted 3-line step-by-step roll plan, or None if data unavailable.
+    after_expiry: find the first available expiry after this date (defaults to pos expiry)."""
     expiry    = pos["expiry"]
     strike    = pos["strike"]
     contracts = pos["contracts"]
     shares    = contracts * 100
-    after     = sorted(e for e in roll_quotes if e > expiry)
+    ref       = after_expiry or expiry
+    after     = sorted(e for e in roll_quotes if e > ref)
     if not after:
         return None
     next_exp = after[0]
@@ -305,6 +307,23 @@ def run_alerts(positions, mkt, option_quotes=None, roll_quotes=None):
             })
         elif otm_pct < WARN_ZONE_PCT:
             gap_dollars = strike - price
+            reco = _build_roll_reco(
+                pos, close_ask, roll_quotes, [0, 5],
+                fallback=(
+                    f"  A) No action required yet, but watch the tape. Check back at the "
+                    f"next 30-minute interval.\n"
+                    f"  B) If IV is elevated today (see header), this is a decent time to "
+                    f"roll up preemptively — you'll get a better credit for the new leg "
+                    f"than you would after further upside.\n"
+                    f"  C) Tighten your mental stop: plan the specific roll trade you'd "
+                    f"execute if AMZN reaches ${strike * 0.98:.2f} (2% OTM threshold) so "
+                    f"you can act fast without deliberating under pressure."
+                ),
+                suffix=(
+                    f"  __LETTER__) No immediate action needed — monitor closely. "
+                    f"If AMZN reaches ${strike * 0.98:.2f} (2% OTM), execute one of the rolls above."
+                ),
+            )
             alerts.append({
                 "level": "WARN",
                 "emoji": "🟡",
@@ -317,16 +336,7 @@ def run_alerts(positions, mkt, option_quotes=None, roll_quotes=None):
                     f"as a buffer. The position needs active monitoring; another 2% move "
                     f"triggers a red alert."
                 ),
-                "reco": (
-                    f"  A) No action required yet, but watch the tape. Check back at the "
-                    f"next 30-minute interval.\n"
-                    f"  B) If IV is elevated today (see header), this is a decent time to "
-                    f"roll up preemptively — you'll get a better credit for the new leg "
-                    f"than you would after further upside.\n"
-                    f"  C) Tighten your mental stop: plan the specific roll trade you'd "
-                    f"execute if AMZN reaches ${strike * 0.98:.2f} (2% OTM threshold) so "
-                    f"you can act fast without deliberating under pressure."
-                ),
+                "reco": reco,
             })
 
         # Roll trigger
@@ -444,6 +454,42 @@ def run_alerts(positions, mkt, option_quotes=None, roll_quotes=None):
         if days_to_earn > 0 and dte >= days_to_earn:
             earn_move    = price * 0.06
             breach_price = price + earn_move
+            earnings_str = EARNINGS_DATE.strftime("%Y-%m-%d")
+            # Build specific post-earnings roll plans (same strike and +5)
+            earn_reco_parts = []
+            if close_ask and roll_quotes:
+                for delta in [0, 5]:
+                    plan = _roll_plan(pos, close_ask, roll_quotes,
+                                      strike_delta=delta, after_expiry=earnings_str)
+                    if plan:
+                        label  = f"${strike} (same)" if delta == 0 else f"${strike + delta}"
+                        letter = chr(ord("A") + len(earn_reco_parts))
+                        earn_reco_parts.append(
+                            f"  {letter}) Roll to {label} Call → post-earnings expiry:\n{plan}"
+                        )
+            if earn_reco_parts:
+                next_letter = chr(ord("A") + len(earn_reco_parts))
+                earn_reco_parts += [
+                    f"  {next_letter}) Close 1–2 weeks before Jul 30: eliminates gap-risk; "
+                    f"you pay elevated IV but sidestep the binary event.",
+                    f"  {chr(ord(next_letter)+1)}) Convert to a spread: buy a ${strike + 10} Call "
+                    f"to cap max loss. Costs ~$0.50–$1.50/sh.\n"
+                    f"  {chr(ord(next_letter)+2)}) Hold only if >${strike} is >8% OTM and you have "
+                    f"a roll plan ready for the open on Jul 31.",
+                ]
+                earn_reco = "\n\n".join(earn_reco_parts)
+            else:
+                earn_reco = (
+                    f"  A) Roll to post-earnings expiry (e.g., Aug/Sep) at the same or "
+                    f"higher strike before Jul 28 — you'll capture elevated pre-earnings "
+                    f"IV in the credit you receive.\n"
+                    f"  B) Close the leg 1–2 weeks before Jul 30: yes, you pay elevated "
+                    f"IV, but you eliminate the gap-risk entirely.\n"
+                    f"  C) Convert to a spread: buy a call at ${strike + 10} to cap your "
+                    f"maximum loss. Costs ~$0.50–$1.50/sh but limits a runaway scenario.\n"
+                    f"  D) Hold only if ${strike} is >8% OTM AND you have a roll plan "
+                    f"ready to execute on the open on Jul 31."
+                )
             alerts.append({
                 "level": "WARN",
                 "emoji": "📅",
@@ -460,17 +506,7 @@ def run_alerts(positions, mkt, option_quotes=None, roll_quotes=None):
                     f"extrinsic value — but by then the damage from intrinsic value "
                     f"(if ITM) is already done."
                 ),
-                "reco": (
-                    f"  A) Roll to post-earnings expiry (e.g., Aug/Sep) at the same or "
-                    f"higher strike before Jul 28 — you'll capture elevated pre-earnings "
-                    f"IV in the credit you receive.\n"
-                    f"  B) Close the leg 1–2 weeks before Jul 30: yes, you pay elevated "
-                    f"IV, but you eliminate the gap-risk entirely.\n"
-                    f"  C) Convert to a spread: buy a call at ${strike + 10} to cap your "
-                    f"maximum loss. Costs ~$0.50–$1.50/sh but limits a runaway scenario.\n"
-                    f"  D) Hold only if ${strike} is >8% OTM AND you have a roll plan "
-                    f"ready to execute on the open on Jul 31."
-                ),
+                "reco": earn_reco,
             })
 
     # ── Daily drop ──────────────────────────────────────────────────────
