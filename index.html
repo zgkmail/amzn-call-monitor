@@ -15,14 +15,32 @@
     details .arr-o { display: none; }
     details[open] .arr-c { display: none; }
     details[open] .arr-o { display: inline; }
+    /* chat panel slide-up */
+    #chat-panel {
+      transition: transform 0.25s ease, opacity 0.25s ease;
+      transform: translateY(8px);
+      opacity: 0;
+      pointer-events: none;
+    }
+    #chat-panel.open {
+      transform: translateY(0);
+      opacity: 1;
+      pointer-events: auto;
+    }
+    #chat-messages {
+      scrollbar-width: thin;
+      scrollbar-color: #374151 transparent;
+    }
   </style>
   <!-- Tailwind dynamic-class safelist (hidden) -->
   <div class="hidden
-    border-red-700 border-yellow-700 border-gray-700
+    border-red-700 border-yellow-700 border-gray-700 border-blue-600
     border-red-600 border-yellow-600
-    bg-red-950 bg-yellow-950
-    text-red-300 text-yellow-300 text-red-400 text-yellow-400 text-green-400
-    text-red-400 text-gray-300 text-gray-600">
+    bg-red-950 bg-yellow-950 bg-blue-950
+    text-red-300 text-yellow-300 text-blue-300 text-red-400 text-yellow-400 text-green-400
+    text-red-400 text-gray-300 text-gray-600
+    bg-blue-900 bg-blue-800 hover:bg-blue-700
+    text-blue-400 text-blue-200">
   </div>
 </head>
 <body class="bg-gray-950 text-gray-100 min-h-screen antialiased">
@@ -90,15 +108,66 @@
     <!-- Position cards -->
     <div id="positions-grid" class="grid grid-cols-1 gap-5"></div>
 
+    <!-- Leg recommendation card (injected here) -->
+    <div id="rec-container"></div>
+
   </main>
 
   <footer class="text-center text-xs text-gray-800 pb-8">
     Data: Yahoo Finance (~15 min delayed) · Alerts via monitor.py
   </footer>
 
+  <!-- Chat FAB -->
+  <button id="chat-fab" onclick="toggleChat()"
+          title="Ask Claude about your positions"
+          class="fixed bottom-6 right-6 z-40 w-14 h-14 rounded-full shadow-lg
+                 flex items-center justify-center text-2xl leading-none
+                 bg-blue-600 hover:bg-blue-500 text-white transition-colors
+                 disabled:opacity-40 disabled:cursor-not-allowed">
+    💬
+  </button>
+
+  <!-- Chat panel -->
+  <div id="chat-panel"
+       class="fixed bottom-24 right-4 z-40 w-96 max-w-[calc(100vw-2rem)]
+              bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl
+              flex flex-col overflow-hidden" style="height: 520px;">
+
+    <!-- Panel header -->
+    <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 bg-gray-900/95">
+      <div>
+        <span class="text-sm font-semibold text-white">Ask Claude</span>
+        <span class="text-xs text-gray-500 ml-2">live AMZN data in context</span>
+      </div>
+      <button onclick="toggleChat()" class="text-gray-500 hover:text-gray-200 text-xl leading-none">✕</button>
+    </div>
+
+    <!-- Messages -->
+    <div id="chat-messages" class="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-sm">
+      <p class="text-gray-600 text-xs text-center">Ask anything about your positions, alerts, or next steps.</p>
+    </div>
+
+    <!-- Input row -->
+    <div class="border-t border-gray-800 p-3 flex gap-2">
+      <input id="chat-input" type="text" placeholder="Type a message…"
+             onkeydown="if(event.key==='Enter' && !event.shiftKey){event.preventDefault();sendChat();}"
+             class="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-100
+                    placeholder-gray-600 focus:outline-none focus:border-blue-600" />
+      <button id="chat-send" onclick="sendChat()"
+              class="bg-blue-600 hover:bg-blue-500 text-white text-sm px-3 py-2 rounded-lg
+                     transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+        Send
+      </button>
+    </div>
+  </div>
+
 <script>
 const REFRESH_S = 60;
 let countdownTimer = null;
+let chatOpen      = false;
+let chatEnabled   = false;
+let chatHistory   = [];   // [{role, content}, ...]
+let chatWaiting   = false;
 
 // ── formatting helpers ────────────────────────────────────────────────────
 
@@ -250,6 +319,69 @@ function posCard(pos) {
     </div>`;
 }
 
+// ── recommendation card ───────────────────────────────────────────────────
+
+function recCard(rec) {
+  if (!rec) return '';
+  const sign = rec.otm_pct >= 0 ? '+' : '';
+  const earnWarn = rec.earnings_overlap
+    ? `<div class="mt-3 flex items-start gap-2 text-xs text-yellow-300 bg-yellow-950/40 border border-yellow-800 rounded-lg px-3 py-2">
+         <span class="shrink-0">⚠</span>
+         <span>Expiry spans Jul 30 earnings — expect elevated IV and assignment risk around that date.</span>
+       </div>`
+    : '';
+  const ivLine = rec.iv != null
+    ? `<div class="flex justify-between items-baseline">
+         <span class="text-gray-500">Impl. Vol</span>
+         <span class="text-gray-300 font-mono">${rec.iv}%</span>
+       </div>`
+    : '';
+
+  return `
+    <div class="bg-gray-900 border-2 border-dashed border-blue-600 rounded-xl p-5 flex flex-col gap-4">
+      <div class="flex items-start justify-between">
+        <div>
+          <div class="flex items-baseline gap-2">
+            <span class="text-xl font-bold text-white">$${rec.strike} Call</span>
+            <span class="text-xs font-bold bg-blue-600 text-white px-2 py-0.5 rounded-full tracking-wide">+ ADD LEG</span>
+          </div>
+          <div class="text-sm text-gray-500 mt-0.5">
+            ${fmtDate(rec.expiry)} · <span class="font-mono font-semibold text-gray-300">${rec.dte} DTE</span>
+          </div>
+          <div class="text-xs text-gray-600 mt-0.5">${rec.open_legs} of 3 legs open · 4 contracts suggested</div>
+        </div>
+        <span class="text-xs text-blue-300 bg-blue-950 border border-blue-700 px-2 py-0.5 rounded-full">
+          ${sign}${rec.otm_pct}% OTM
+        </span>
+      </div>
+
+      <div class="space-y-2.5 text-sm">
+        <div class="flex justify-between items-baseline">
+          <span class="text-gray-500">Bid / Ask / Mid</span>
+          <span class="font-mono text-gray-200">
+            ${fmtMoney(rec.bid)} / ${fmtMoney(rec.ask)} /
+            <span class="text-white font-bold">${fmtMoney(rec.mid)}</span>
+          </span>
+        </div>
+        ${ivLine}
+        <div class="flex justify-between items-baseline">
+          <span class="text-gray-500">Credit / share</span>
+          <span class="text-green-400 font-mono font-semibold">${fmtMoney(rec.mid)}</span>
+        </div>
+        <div class="flex justify-between items-baseline">
+          <span class="text-gray-500">Credit (4 contracts)</span>
+          <span class="text-green-400 font-mono font-semibold">${fmtMoney(rec.total_4contracts, 0)}</span>
+        </div>
+      </div>
+
+      ${earnWarn}
+
+      <p class="text-xs text-gray-600 italic">
+        Suggestion only — verify live quotes before placing. Add to positions.json after fill.
+      </p>
+    </div>`;
+}
+
 // ── summary strip ─────────────────────────────────────────────────────────
 
 function renderSummary(positions) {
@@ -293,6 +425,14 @@ function render(data) {
   document.getElementById('mkt-alerts').innerHTML     = data.mkt_alerts.map(alertItem).join('');
   document.getElementById('positions-grid').innerHTML = data.positions.map(posCard).join('');
   renderSummary(data.positions);
+  document.getElementById('rec-container').innerHTML  = recCard(data.recommendation || null);
+
+  chatEnabled = !!data.chat_enabled;
+  const fab = document.getElementById('chat-fab');
+  fab.disabled = !chatEnabled;
+  fab.title = chatEnabled
+    ? 'Ask Claude about your positions'
+    : 'Set ANTHROPIC_API_KEY to enable chat';
 }
 
 // ── market hours ─────────────────────────────────────────────────────────
@@ -361,6 +501,82 @@ function manualRefresh() {
   document.getElementById('countdown').textContent = '…';
   startRefreshSpin();
   fetchAndRender().then(startCountdown);
+}
+
+// ── chat panel ────────────────────────────────────────────────────────────
+
+function toggleChat() {
+  if (!chatEnabled) return;
+  chatOpen = !chatOpen;
+  const panel = document.getElementById('chat-panel');
+  if (chatOpen) {
+    panel.classList.add('open');
+    document.getElementById('chat-input').focus();
+  } else {
+    panel.classList.remove('open');
+  }
+}
+
+function appendChatBubble(role, text, id) {
+  const msgs = document.getElementById('chat-messages');
+  const isUser = role === 'user';
+  const div = document.createElement('div');
+  div.className = isUser ? 'flex justify-end' : 'flex justify-start';
+  if (id) div.id = id;
+  div.innerHTML = `
+    <div class="max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed
+                ${isUser ? 'bg-blue-600 text-white rounded-br-sm' : 'bg-gray-800 text-gray-200 rounded-bl-sm'}">
+      ${isUser ? esc(text) : markdownLite(esc(text))}
+    </div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop = msgs.scrollHeight;
+  return div;
+}
+
+function markdownLite(s) {
+  // minimal: **bold**, `code`, newlines → <br>
+  return s
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/`([^`]+)`/g, '<code class="bg-gray-700 px-1 rounded text-xs font-mono">$1</code>')
+    .replace(/\n/g, '<br>');
+}
+
+async function sendChat() {
+  if (!chatEnabled || chatWaiting) return;
+  const input = document.getElementById('chat-input');
+  const text  = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  chatHistory.push({ role: 'user', content: text });
+  appendChatBubble('user', text);
+
+  chatWaiting = true;
+  document.getElementById('chat-send').disabled = true;
+
+  const thinkingEl = appendChatBubble('assistant', '…', 'chat-thinking');
+  thinkingEl.querySelector('div').classList.add('animate-pulse');
+
+  try {
+    const resp = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: chatHistory }),
+    });
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Chat error');
+
+    document.getElementById('chat-thinking')?.remove();
+    chatHistory.push({ role: 'assistant', content: data.content });
+    appendChatBubble('assistant', data.content);
+  } catch (err) {
+    document.getElementById('chat-thinking')?.remove();
+    appendChatBubble('assistant', '⚠ ' + err.message);
+  } finally {
+    chatWaiting = false;
+    document.getElementById('chat-send').disabled = false;
+    document.getElementById('chat-input').focus();
+  }
 }
 
 // initial load
