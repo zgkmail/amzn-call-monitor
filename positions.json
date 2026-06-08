@@ -1,12 +1,12 @@
 [
   {
-    "leg": "2m",
+    "leg": "4m",
     "contracts": 4,
-    "strike": 285,
-    "expiry": "2026-07-17",
-    "premium": 5.60,
-    "option_symbol": "AMZN2617G285",
-    "notes": "Leg 2 filled May 21 at $5.60"
+    "strike": 275,
+    "expiry": "2026-09-18",
+    "premium": 9.60,
+    "option_symbol": "AMZN260918C275",
+    "notes": "Leg 4 filled June 8 at $9.60"
   },
   {
     "leg": "3m",
