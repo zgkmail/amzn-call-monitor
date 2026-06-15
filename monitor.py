@@ -546,8 +546,8 @@ def run_alerts(positions, mkt, option_quotes=None, roll_quotes=None):
 
 # ── LEG RECOMMENDATION ────────────────────────────────────────────────────
 def get_leg_recommendation(positions, mkt):
-    """Return a recommended new leg dict, or None if MAX_LEGS are already open."""
-    if len(positions) >= MAX_LEGS:
+    """Return a recommended new leg dict, or None if fewer than 3 legs are open or MAX_LEGS are already open."""
+    if len(positions) < 3 or len(positions) >= MAX_LEGS:
         return None
 
     price = mkt["price"]
@@ -631,7 +631,7 @@ def _wrap(text, width=72, indent="     "):
     return "\n".join(out)
 
 
-def build_email(alerts, positions, mkt, option_quotes=None, recommendation=None):
+def build_email(alerts, positions, mkt, option_quotes=None):
     price      = mkt["price"]
     change_pct = mkt["change_pct"]
     iv         = mkt["iv"]
@@ -720,29 +720,6 @@ def build_email(alerts, positions, mkt, option_quotes=None, recommendation=None)
             )
         lines.append("")
 
-    if recommendation:
-        r       = recommendation
-        sign    = "+" if r["otm_pct"] >= 0 else ""
-        iv_line = [f"  IV (implied):  {r['iv']}%"] if r["iv"] else []
-        earn    = ["  ⚠ Expiry spans Jul 30 earnings — IV spike risk."] if r["earnings_overlap"] else []
-        lines += (
-            [
-                divider,
-                f"  💡  OPEN LEG OPPORTUNITY  ({r['open_legs']}/{MAX_LEGS} legs currently open)",
-                divider,
-                f"  ${r['strike']:.0f} Call  ·  {r['expiry']}  ({r['dte']} DTE)  ·  OTM {sign}{r['otm_pct']}%",
-                f"  Bid / Ask / Mid:   ${r['bid']:.2f} / ${r['ask']:.2f} / ${r['mid']:.2f} per share",
-                f"  Credit:            ${r['per_contract']:.2f}/contract  ·  ${r['total_4contracts']:.2f} for 4 contracts",
-            ]
-            + iv_line + earn
-            + [
-                "",
-                "  Sell to open a limit order at the ask (or mid), then add the",
-                "  new leg to positions.json to begin monitoring it.",
-                "",
-            ]
-        )
-
     lines += [
         divider,
         "  To update positions: edit positions.json in your GitHub repo.",
@@ -797,17 +774,11 @@ def main():
     alerts = run_alerts(positions, mkt, option_quotes, roll_quotes)
     print(f"Alerts triggered: {len(alerts)} ({sum(1 for a in alerts if a['level']=='RISK')} risk, {sum(1 for a in alerts if a['level']=='WARN')} warn)")
 
-    rec = get_leg_recommendation(positions, mkt)
-    if rec:
-        print(f"Leg recommendation: ${rec['strike']:.0f} Call · {rec['expiry']} · mid ${rec['mid']}")
-    else:
-        print(f"Leg recommendation: none ({len(positions)}/{MAX_LEGS} legs open)")
-
     hour             = datetime.now().hour
     is_daily_summary = (hour == 20)  # ~4pm ET = 20:00 UTC (only the first end-of-day run)
 
     if alerts or is_daily_summary:
-        subject, body = build_email(alerts, positions, mkt, option_quotes, recommendation=rec)
+        subject, body = build_email(alerts, positions, mkt, option_quotes)
         send_email(subject, body)
     else:
         print("No alerts and not daily summary time — skipping email.")
