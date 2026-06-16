@@ -33,6 +33,13 @@ MAX_LEGS            = 3     # recommend a new leg when fewer than this are open
 RECOMMEND_MIN_DTE   = 28    # min DTE for the recommended leg
 RECOMMEND_MAX_DTE   = 70    # max DTE for the recommended leg
 
+# Chain snapshot (for AI analysis)
+ANALYSIS_MIN_DTE    = 14    # earliest expiry to include in chain snapshot
+ANALYSIS_MAX_DTE    = 130   # latest expiry to include in chain snapshot
+ANALYSIS_MAX_EXP    = 4     # number of expiries to fetch
+ANALYSIS_MIN_OTM    = 0.02  # 2% OTM lower bound
+ANALYSIS_MAX_OTM    = 0.25  # 25% OTM upper bound
+
 # ── LOAD POSITIONS ────────────────────────────────────────────────────────
 def load_positions():
     with open(POSITIONS_FILE) as f:
@@ -616,6 +623,63 @@ def get_leg_recommendation(positions, mkt):
         }
     except Exception:
         return None
+
+# ── CHAIN SNAPSHOT (for AI analysis) ─────────────────────────────────────
+def get_chain_snapshot(positions, mkt):
+    """Fetch call chains for the next ANALYSIS_MAX_EXP expiries in the DTE window.
+    Returns a list of expiry dicts each containing a list of strike rows."""
+    price  = mkt["price"]
+    today  = date.today()
+    lo     = price * (1 + ANALYSIS_MIN_OTM)
+    hi     = price * (1 + ANALYSIS_MAX_OTM)
+    held   = {pos["expiry"] for pos in positions}
+
+    try:
+        ticker    = yf.Ticker("AMZN")
+        available = list(ticker.options)
+    except Exception:
+        return []
+
+    candidates = [
+        exp_str for exp_str in available
+        if ANALYSIS_MIN_DTE <= (datetime.strptime(exp_str, "%Y-%m-%d").date() - today).days <= ANALYSIS_MAX_DTE
+    ][:ANALYSIS_MAX_EXP]
+
+    result = []
+    for exp_str in candidates:
+        exp = datetime.strptime(exp_str, "%Y-%m-%d").date()
+        dte = (exp - today).days
+        try:
+            calls    = ticker.option_chain(exp_str).calls
+            filtered = calls[(calls["strike"] >= lo) & (calls["strike"] <= hi) & (calls["bid"] > 0.05)]
+            strikes  = []
+            for _, row in filtered.iterrows():
+                strike  = float(row["strike"])
+                bid     = round(float(row["bid"]), 2)
+                ask     = round(float(row["ask"]), 2)
+                mid     = round((bid + ask) / 2, 2)
+                iv_raw  = row.get("impliedVolatility")
+                strikes.append({
+                    "strike":        strike,
+                    "otm_pct":       round((strike - price) / price * 100, 1),
+                    "bid":           bid,
+                    "ask":           ask,
+                    "mid":           mid,
+                    "iv":            round(float(iv_raw) * 100, 1) if iv_raw else None,
+                    "volume":        int(row.get("volume") or 0),
+                    "open_interest": int(row.get("openInterest") or 0),
+                })
+            if strikes:
+                result.append({
+                    "expiry":           exp_str,
+                    "dte":              dte,
+                    "earnings_overlap": (exp >= EARNINGS_DATE),
+                    "already_held":     exp_str in held,
+                    "strikes":          strikes,
+                })
+        except Exception:
+            continue
+    return result
 
 # ── EMAIL ─────────────────────────────────────────────────────────────────
 def _wrap(text, width=72, indent="     "):

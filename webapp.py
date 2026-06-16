@@ -20,6 +20,7 @@ from flask import Flask, jsonify, request, send_from_directory
 from monitor import (
     MAX_LEGS,
     days_to_expiry,
+    get_chain_snapshot,
     get_leg_recommendation,
     get_market_data,
     get_option_quotes,
@@ -192,6 +193,103 @@ def api_chat():
             max_tokens=1024,
             system=system,
             messages=messages,
+        )
+
+        return jsonify({
+            "ok":      True,
+            "content": resp.content[0].text,
+            "as_of":   datetime.now().strftime("%H:%M:%S"),
+        })
+
+    except Exception as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+
+def _build_analysis_system(mkt, positions, alerts, chain_snapshot):
+    s = lambda n: "+" if n >= 0 else ""
+    price = mkt["price"]
+
+    pos_lines = []
+    for p in positions:
+        pnl = (f"{s(p['profit_pct'] or 0)}{p['profit_pct']}% · "
+               f"{s(p['profit_per_sh'] or 0)}${abs(p['profit_per_sh'] or 0):.2f}/sh · "
+               f"{s(p['total_pnl'] or 0)}${abs(p['total_pnl'] or 0):,.0f} total"
+               if p["profit_pct"] is not None else "no live quote")
+        pos_lines.append(
+            f"  Leg {p['leg']}: ${p['strike']} Call | {p['expiry']} | {p['dte']} DTE | "
+            f"{s(p['otm_pct'])}{p['otm_pct']}% OTM | sold ${p['premium']}/sh "
+            f"(${p['total_premium_collected']:,.0f} total) | current mid "
+            f"${p['current_mid']:.2f} (bid ${p['current_bid']:.2f} / ask ${p['current_ask']:.2f}) | P&L {pnl}"
+            if p["current_mid"] is not None else
+            f"  Leg {p['leg']}: ${p['strike']} Call | {p['expiry']} | {p['dte']} DTE | "
+            f"{s(p['otm_pct'])}{p['otm_pct']}% OTM | sold ${p['premium']}/sh | {pnl}"
+        )
+
+    alert_lines = [f"  [{a['level']}] {a['title']}" for a in alerts] or ["  None"]
+
+    chain_lines = []
+    for exp in chain_snapshot:
+        earn = " ⚠ spans Jul 30 earnings" if exp["earnings_overlap"] else ""
+        held = " [already held — shown for roll reference]" if exp["already_held"] else ""
+        chain_lines.append(f"\n  Expiry {exp['expiry']} ({exp['dte']} DTE){earn}{held}")
+        chain_lines.append(f"  {'Strike':>8}  {'OTM%':>6}  {'Bid':>6}  {'Ask':>6}  {'Mid':>6}  {'IV%':>5}  Vol")
+        for st in exp["strikes"]:
+            iv_s = f"{st['iv']:.1f}" if st["iv"] else "  n/a"
+            chain_lines.append(
+                f"  ${st['strike']:>7.0f}  {s(st['otm_pct'])}{st['otm_pct']:>5.1f}%"
+                f"  ${st['bid']:>5.2f}  ${st['ask']:>5.2f}  ${st['mid']:>5.2f}"
+                f"  {iv_s:>5}  {st['volume']}"
+            )
+
+    return (
+        f"You are an expert options trading analyst helping manage an AMZN covered call portfolio.\n\n"
+        f"Live snapshot ({datetime.now().strftime('%Y-%m-%d %H:%M UTC')}):\n"
+        f"  AMZN ${price} ({s(mkt['change_pct'])}{mkt['change_pct']}% today)"
+        f" | prev close ${mkt['prev_close']} | 30D IV {mkt['iv'] or 'n/a'}%\n\n"
+        f"Open positions ({len(positions)}/{MAX_LEGS} legs):\n" + "\n".join(pos_lines) + "\n\n"
+        f"Active alerts:\n" + "\n".join(alert_lines) + "\n\n"
+        f"Available option chains (calls, ~2–25% OTM, data ~15 min delayed):"
+        + "".join(chain_lines)
+    )
+
+
+@app.route("/api/analysis")
+def api_analysis():
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return jsonify({"ok": False, "error": "ANTHROPIC_API_KEY not set"}), 400
+
+    try:
+        import anthropic as _anthropic
+
+        positions      = load_positions()
+        mkt            = get_market_data()
+        quotes         = get_option_quotes(positions)
+        roll_quotes    = get_roll_quotes(positions)
+        alerts         = run_alerts(positions, mkt, quotes, roll_quotes)
+        chain_snapshot = get_chain_snapshot(positions, mkt)
+        enriched       = [_enrich(p, mkt, quotes) for p in positions]
+
+        system = _build_analysis_system(mkt, enriched, alerts, chain_snapshot)
+
+        client = _anthropic.Anthropic(api_key=api_key)
+        resp   = client.messages.create(
+            model="claude-sonnet-4-6",
+            max_tokens=1024,
+            system=system,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "Analyze my covered call portfolio using the live data above. "
+                    "Structure your response as:\n\n"
+                    "**Leg Analysis** — for each open leg: current P&L status, risk level, hold/roll/close recommendation.\n\n"
+                    "**New Leg** — scan the available chains. If opening a new leg makes sense, specify the exact strike "
+                    "and expiry with your reasoning (premium quality, OTM buffer, earnings risk). "
+                    "If nothing looks attractive, say why.\n\n"
+                    "**Portfolio Notes** — any overall risk observations or upcoming events to watch.\n\n"
+                    "Be specific with numbers. Keep it concise."
+                ),
+            }],
         )
 
         return jsonify({

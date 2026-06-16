@@ -111,6 +111,29 @@
     <!-- Leg recommendation card (injected here) -->
     <div id="rec-container"></div>
 
+    <!-- AI analysis card -->
+    <div id="analysis-section" class="hidden">
+      <div class="bg-gray-900 border border-gray-800 rounded-xl p-5 flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <div>
+            <span class="text-sm font-semibold text-white">Portfolio Analysis</span>
+            <span class="text-xs text-gray-600 ml-2">live chains · Claude</span>
+          </div>
+          <button id="btn-analysis" onclick="generateAnalysis()"
+                  class="flex items-center gap-1.5 text-xs bg-blue-700 hover:bg-blue-600
+                         text-white px-3 py-1.5 rounded-md transition-colors
+                         disabled:opacity-40 disabled:cursor-not-allowed">
+            <span id="analysis-spin" class="text-sm leading-none hidden spinning">↻</span>
+            <span id="analysis-btn-label">Generate</span>
+          </button>
+        </div>
+        <div id="analysis-body" class="text-sm text-gray-500 italic leading-relaxed">
+          Pull live option chains and get an AI analysis of your positions — including whether a new leg makes sense.
+        </div>
+        <div id="analysis-asof" class="hidden text-xs text-gray-700"></div>
+      </div>
+    </div>
+
   </main>
 
   <footer class="text-center text-xs text-gray-800 pb-8">
@@ -433,6 +456,11 @@ function render(data) {
   fab.title = chatEnabled
     ? 'Ask Claude about your positions'
     : 'Set ANTHROPIC_API_KEY to enable chat';
+
+  // Show analysis card whenever chat (API key) is available
+  if (chatEnabled) {
+    document.getElementById('analysis-section').classList.remove('hidden');
+  }
 }
 
 // ── market hours ─────────────────────────────────────────────────────────
@@ -534,11 +562,54 @@ function appendChatBubble(role, text, id) {
 }
 
 function markdownLite(s) {
-  // minimal: **bold**, `code`, newlines → <br>
+  // **bold**, `code`, "- " bullets, newlines → <br>
   return s
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*\*(.*?)\*\*/g, '<strong class="text-gray-100">$1</strong>')
     .replace(/`([^`]+)`/g, '<code class="bg-gray-700 px-1 rounded text-xs font-mono">$1</code>')
+    .replace(/^- (.+)$/gm, '<div class="flex gap-2 pl-1"><span class="text-gray-600 shrink-0">·</span><span>$1</span></div>')
     .replace(/\n/g, '<br>');
+}
+
+// ── AI analysis ───────────────────────────────────────────────────────────
+
+let analysisRunning = false;
+
+async function generateAnalysis() {
+  if (analysisRunning || !chatEnabled) return;
+  analysisRunning = true;
+
+  const btn   = document.getElementById('btn-analysis');
+  const spin  = document.getElementById('analysis-spin');
+  const label = document.getElementById('analysis-btn-label');
+  const body  = document.getElementById('analysis-body');
+  const asof  = document.getElementById('analysis-asof');
+
+  btn.disabled    = true;
+  spin.classList.remove('hidden');
+  label.textContent = 'Analysing…';
+  body.className  = 'text-sm text-gray-500 italic leading-relaxed animate-pulse';
+  body.textContent = 'Fetching live option chains and generating analysis…';
+  asof.classList.add('hidden');
+
+  try {
+    const resp = await fetch('/api/analysis');
+    const data = await resp.json();
+    if (!data.ok) throw new Error(data.error || 'Analysis failed');
+
+    body.className = 'text-sm text-gray-300 leading-relaxed space-y-2';
+    body.innerHTML = markdownLite(esc(data.content));
+    asof.textContent = 'Generated at ' + data.as_of + ' (chain data ~15 min delayed)';
+    asof.classList.remove('hidden');
+    label.textContent = 'Regenerate';
+  } catch (err) {
+    body.className  = 'text-sm text-red-400 italic leading-relaxed';
+    body.textContent = '⚠ ' + err.message;
+    label.textContent = 'Retry';
+  } finally {
+    analysisRunning = false;
+    spin.classList.add('hidden');
+    btn.disabled = false;
+  }
 }
 
 async function sendChat() {
