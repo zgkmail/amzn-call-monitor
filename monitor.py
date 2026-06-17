@@ -44,7 +44,7 @@ ANALYSIS_MAX_OTM    = 0.25  # 25% OTM upper bound
 def _yf_log(call, ok, detail=""):
     status = "OK  " if ok else "FAIL"
     note   = f"  {detail}" if detail else ""
-    print(f"[YF] {call:<26} {status}{note}")
+    print(f"[YF] {call:<26} {status}{note}", flush=True)
 
 # ── LOAD POSITIONS ────────────────────────────────────────────────────────
 def load_positions():
