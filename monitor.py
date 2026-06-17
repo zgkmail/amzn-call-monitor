@@ -844,6 +844,45 @@ def send_email(subject, body):
     print(f"Email sent → {GMAIL_TO}")
     print(f"Subject: {subject}")
 
+# ── OPTION PRICE LOG ──────────────────────────────────────────────────────
+OPTION_LOG_FILE = "option_prices.json"
+
+def save_option_log(positions, mkt, option_quotes):
+    """Write current open leg bid/ask/mid to option_prices.json for external consumption."""
+    legs = []
+    for pos in positions:
+        sym = pos.get("option_symbol")
+        oq  = option_quotes.get(sym, {}) if sym else {}
+        bid = oq.get("bid")
+        ask = oq.get("ask")
+        mid = oq.get("mid")
+        premium    = pos["premium"]
+        profit_pct = round((premium - mid) / premium * 100, 1) if mid is not None else None
+        legs.append({
+            "leg":          pos["leg"].upper(),
+            "symbol":       sym,
+            "strike":       pos["strike"],
+            "expiry":       pos["expiry"],
+            "dte":          days_to_expiry(pos["expiry"]),
+            "premium_sold": premium,
+            "bid":          bid,
+            "ask":          ask,
+            "mid":          mid,
+            "profit_pct":   profit_pct,
+        })
+
+    payload = {
+        "as_of_et":  _now_et().strftime("%Y-%m-%d %H:%M ET"),
+        "as_of_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "amzn_price": mkt["price"],
+        "change_pct": mkt["change_pct"],
+        "legs":       legs,
+    }
+
+    with open(OPTION_LOG_FILE, "w") as f:
+        json.dump(payload, f, indent=2)
+    print(f"Option log saved → {OPTION_LOG_FILE}")
+
 # ── MAIN ──────────────────────────────────────────────────────────────────
 def main():
     print(f"[{_now_et().strftime('%Y-%m-%d %H:%M ET')}] Running AMZN covered call monitor...")
@@ -859,6 +898,7 @@ def main():
         print(f"Option quotes fetched for: {list(option_quotes.keys())}")
     else:
         print("No option quotes available.")
+    save_option_log(positions, mkt, option_quotes)
 
     roll_quotes = get_roll_quotes(positions)
     if roll_quotes:
