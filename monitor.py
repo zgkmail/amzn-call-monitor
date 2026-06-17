@@ -65,11 +65,17 @@ def get_market_data():
     try:
         exp_dates = ticker.options
         if exp_dates:
-            chain = ticker.option_chain(exp_dates[0])
+            # Pick the expiry closest to 30 DTE for a meaningful IV reading
+            target_exp = min(
+                exp_dates,
+                key=lambda e: abs((datetime.strptime(e, "%Y-%m-%d").date() - date.today()).days - 30)
+            )
+            dte_used   = (datetime.strptime(target_exp, "%Y-%m-%d").date() - date.today()).days
+            chain = ticker.option_chain(target_exp)
             calls = chain.calls
             atm   = calls.iloc[(calls["strike"] - price).abs().argsort()[:1]]
             iv    = round(float(atm["impliedVolatility"].values[0]) * 100, 1)
-            _yf_log("IV (ATM chain)", True, f"{iv}%")
+            _yf_log("IV (ATM chain)", True, f"{iv}%  [{target_exp} / {dte_used} DTE]")
         else:
             iv = None
             _yf_log("IV (ATM chain)", False, "no expiries returned")
