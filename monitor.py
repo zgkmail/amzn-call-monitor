@@ -40,6 +40,12 @@ ANALYSIS_MAX_EXP    = 4     # number of expiries to fetch
 ANALYSIS_MIN_OTM    = 0.02  # 2% OTM lower bound
 ANALYSIS_MAX_OTM    = 0.25  # 25% OTM upper bound
 
+# ── YAHOO FINANCE LOGGING ─────────────────────────────────────────────────
+def _yf_log(call, ok, detail=""):
+    status = "OK  " if ok else "FAIL"
+    note   = f"  {detail}" if detail else ""
+    print(f"[YF] {call:<26} {status}{note}")
+
 # ── LOAD POSITIONS ────────────────────────────────────────────────────────
 def load_positions():
     with open(POSITIONS_FILE) as f:
@@ -54,6 +60,7 @@ def get_market_data():
     price      = round(info.last_price, 2)
     prev_close = round(hist["Close"].iloc[-2], 2) if len(hist) >= 2 else price
     change_pct = round((price - prev_close) / prev_close * 100, 2)
+    _yf_log("market data", True, f"AMZN ${price} ({change_pct:+.2f}%)")
 
     try:
         exp_dates = ticker.options
@@ -62,10 +69,13 @@ def get_market_data():
             calls = chain.calls
             atm   = calls.iloc[(calls["strike"] - price).abs().argsort()[:1]]
             iv    = round(float(atm["impliedVolatility"].values[0]) * 100, 1)
+            _yf_log("IV (ATM chain)", True, f"{iv}%")
         else:
             iv = None
-    except Exception:
+            _yf_log("IV (ATM chain)", False, "no expiries returned")
+    except Exception as e:
         iv = None
+        _yf_log("IV (ATM chain)", False, str(e))
 
     return {"price": price, "prev_close": prev_close, "change_pct": change_pct, "iv": iv}
 
@@ -86,21 +96,25 @@ def get_option_quotes(positions):
 
     for exp, legs in by_expiry.items():
         if exp not in available:
-            print(f"Warning: expiry {exp} not in Yahoo Finance chain — skipping option quotes.")
+            _yf_log(f"quotes chain {exp}", False, "expiry not in Yahoo chain")
             continue
         try:
             calls = ticker.option_chain(exp).calls
+            fetched = []
             for pos in legs:
                 row = calls[calls["strike"] == float(pos["strike"])]
                 if row.empty:
-                    print(f"Warning: strike ${pos['strike']} not found in {exp} chain.")
+                    _yf_log(f"quotes chain {exp}", False, f"strike ${pos['strike']} not found")
                     continue
                 bid = round(float(row["bid"].values[0]), 2)
                 ask = round(float(row["ask"].values[0]), 2)
                 mid = round((bid + ask) / 2, 2)
                 result[pos["option_symbol"]] = {"bid": bid, "ask": ask, "mid": mid}
+                fetched.append(f"${pos['strike']} mid=${mid}")
+            if fetched:
+                _yf_log(f"quotes chain {exp}", True, "  ".join(fetched))
         except Exception as e:
-            print(f"Warning: could not fetch option chain for {exp}: {e}")
+            _yf_log(f"quotes chain {exp}", False, str(e))
 
     return result
 
@@ -126,8 +140,9 @@ def get_roll_quotes(positions):
                 }
                 for _, r in calls.iterrows()
             }
+            _yf_log(f"roll chain {exp}", True, f"{len(result[exp])} strikes")
         except Exception as e:
-            print(f"Warning: could not fetch roll chain for {exp}: {e}")
+            _yf_log(f"roll chain {exp}", False, str(e))
     return result
 
 # ── DAYS TO EXPIRY ────────────────────────────────────────────────────────
@@ -637,13 +652,15 @@ def get_chain_snapshot(positions, mkt):
     try:
         ticker    = yf.Ticker("AMZN")
         available = list(ticker.options)
-    except Exception:
+    except Exception as e:
+        _yf_log("snapshot options list", False, str(e))
         return []
 
     candidates = [
         exp_str for exp_str in available
         if ANALYSIS_MIN_DTE <= (datetime.strptime(exp_str, "%Y-%m-%d").date() - today).days <= ANALYSIS_MAX_DTE
     ][:ANALYSIS_MAX_EXP]
+    _yf_log("snapshot options list", True, f"{len(candidates)} expiries selected")
 
     result = []
     for exp_str in candidates:
@@ -677,7 +694,9 @@ def get_chain_snapshot(positions, mkt):
                     "already_held":     exp_str in held,
                     "strikes":          strikes,
                 })
-        except Exception:
+            _yf_log(f"snapshot chain {exp_str}", True, f"{len(strikes)} strikes in range")
+        except Exception as e:
+            _yf_log(f"snapshot chain {exp_str}", False, str(e))
             continue
     return result
 
