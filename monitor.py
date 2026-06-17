@@ -866,17 +866,26 @@ def main():
     else:
         print("No roll quotes available.")
 
-    alerts = run_alerts(positions, mkt, option_quotes, roll_quotes)
-    print(f"Alerts triggered: {len(alerts)} ({sum(1 for a in alerts if a['level']=='RISK')} risk, {sum(1 for a in alerts if a['level']=='WARN')} warn)")
+    alerts      = run_alerts(positions, mkt, option_quotes, roll_quotes)
+    risk_alerts = [a for a in alerts if a["level"] == "RISK"]
+    warn_alerts = [a for a in alerts if a["level"] == "WARN"]
+    print(f"Alerts triggered: {len(alerts)} ({len(risk_alerts)} risk, {len(warn_alerts)} warn)")
 
     now_utc          = datetime.now()
     is_daily_summary = (now_utc.hour == 20 and now_utc.minute < 30)  # 20:00 UTC run only, not 20:30
 
-    if alerts or is_daily_summary:
+    # Send immediately only for RISK alerts; WARNs appear in the daily summary only
+    should_send = bool(risk_alerts) or is_daily_summary
+    if should_send:
         subject, body = build_email(alerts, positions, mkt, option_quotes)
         send_email(subject, body)
+        if not risk_alerts:
+            print("Daily summary sent.")
+        else:
+            print(f"RISK alert email sent ({len(risk_alerts)} risk condition(s)).")
     else:
-        print("No alerts and not daily summary time — skipping email.")
+        reason = f"{len(warn_alerts)} warn(s) — held for daily summary" if warn_alerts else "no alerts"
+        print(f"Skipping email: {reason}.")
 
 if __name__ == "__main__":
     main()
