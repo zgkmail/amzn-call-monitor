@@ -11,6 +11,12 @@ import sys
 from datetime import datetime, date
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from zoneinfo import ZoneInfo
+
+ET = ZoneInfo("America/New_York")
+
+def _now_et():
+    return datetime.now(ET)
 
 import yfinance as yf
 
@@ -744,7 +750,7 @@ def build_email(alerts, positions, mkt, option_quotes=None):
         f"  Price:       ${price}  ({sign}{change_pct}%)",
         f"  Prev close:  ${mkt['prev_close']}",
         f"  30D IV:      {iv}%" if iv else "  30D IV:      n/a",
-        f"  As of:       {datetime.now().strftime('%Y-%m-%d %H:%M ET')}",
+        f"  As of:       {_now_et().strftime('%Y-%m-%d %H:%M ET')}",
         divider,
     ]
 
@@ -840,7 +846,7 @@ def send_email(subject, body):
 
 # ── MAIN ──────────────────────────────────────────────────────────────────
 def main():
-    print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] Running AMZN covered call monitor...")
+    print(f"[{_now_et().strftime('%Y-%m-%d %H:%M ET')}] Running AMZN covered call monitor...")
 
     positions = load_positions()
     print(f"Loaded {len(positions)} position(s).")
@@ -863,8 +869,8 @@ def main():
     alerts = run_alerts(positions, mkt, option_quotes, roll_quotes)
     print(f"Alerts triggered: {len(alerts)} ({sum(1 for a in alerts if a['level']=='RISK')} risk, {sum(1 for a in alerts if a['level']=='WARN')} warn)")
 
-    hour             = datetime.now().hour
-    is_daily_summary = (hour == 20)  # ~4pm ET = 20:00 UTC (only the first end-of-day run)
+    now_utc          = datetime.now()
+    is_daily_summary = (now_utc.hour == 20 and now_utc.minute < 30)  # 20:00 UTC run only, not 20:30
 
     if alerts or is_daily_summary:
         subject, body = build_email(alerts, positions, mkt, option_quotes)
