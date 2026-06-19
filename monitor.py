@@ -845,7 +845,8 @@ def send_email(subject, body):
     print(f"Subject: {subject}")
 
 # ── OPTION PRICE LOG ──────────────────────────────────────────────────────
-OPTION_LOG_FILE = "option_prices.json"
+OPTION_LOG_FILE   = "option_prices.json"
+SUMMARY_SENT_FILE = "last_summary_date.txt"
 
 def save_option_log(positions, mkt, option_quotes):
     """Write current open leg bid/ask/mid to option_prices.json for external consumption."""
@@ -911,17 +912,27 @@ def main():
     warn_alerts = [a for a in alerts if a["level"] == "WARN"]
     print(f"Alerts triggered: {len(alerts)} ({len(risk_alerts)} risk, {len(warn_alerts)} warn)")
 
-    now_utc          = datetime.now()
-    is_daily_summary = (now_utc.hour == 20 and now_utc.minute < 30)  # 20:00 UTC run only, not 20:30
+    # Daily summary: first run at or after 19:30 UTC that hasn't sent today's summary yet.
+    # Using a state file avoids the narrow time-window problem (GitHub Actions cron can
+    # be delayed by 30-60+ min, causing the exact hour==20 check to miss entirely).
+    now_utc   = datetime.utcnow()
+    today_utc = now_utc.strftime("%Y-%m-%d")
+    past_summary_window = now_utc.hour > 19 or (now_utc.hour == 19 and now_utc.minute >= 30)
+    try:
+        already_sent = open(SUMMARY_SENT_FILE).read().strip() == today_utc
+    except FileNotFoundError:
+        already_sent = False
+    is_daily_summary = past_summary_window and not already_sent
 
     # Send immediately only for RISK alerts; WARNs appear in the daily summary only
     should_send = bool(risk_alerts) or is_daily_summary
     if should_send:
         subject, body = build_email(alerts, positions, mkt, option_quotes)
         send_email(subject, body)
-        if not risk_alerts:
+        if is_daily_summary:
+            open(SUMMARY_SENT_FILE, "w").write(today_utc)
             print("Daily summary sent.")
-        else:
+        if risk_alerts:
             print(f"RISK alert email sent ({len(risk_alerts)} risk condition(s)).")
     else:
         reason = f"{len(warn_alerts)} warn(s) — held for daily summary" if warn_alerts else "no alerts"
