@@ -8,7 +8,7 @@ import json
 import os
 import smtplib
 import sys
-from datetime import datetime, date
+from datetime import datetime, date, timezone
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from zoneinfo import ZoneInfo
@@ -874,7 +874,7 @@ def save_option_log(positions, mkt, option_quotes):
 
     payload = {
         "as_of_et":  _now_et().strftime("%Y-%m-%d %H:%M ET"),
-        "as_of_utc": datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "as_of_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "amzn_price": mkt["price"],
         "change_pct": mkt["change_pct"],
         "legs":       legs,
@@ -915,7 +915,7 @@ def main():
     # Daily summary: first run at or after 19:30 UTC that hasn't sent today's summary yet.
     # Using a state file avoids the narrow time-window problem (GitHub Actions cron can
     # be delayed by 30-60+ min, causing the exact hour==20 check to miss entirely).
-    now_utc   = datetime.utcnow()
+    now_utc   = datetime.now(timezone.utc)
     today_utc = now_utc.strftime("%Y-%m-%d")
     past_summary_window = now_utc.hour > 19 or (now_utc.hour == 19 and now_utc.minute >= 30)
     try:
