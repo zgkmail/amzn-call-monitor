@@ -35,6 +35,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add option_prices.json last_summary_date.txt
+          git add option_prices.json
+          [ -f last_summary_date.txt ] && git add last_summary_date.txt || true
           git diff --cached --quiet || git commit -m "chore: update option prices [skip ci]"
           git push
