@@ -1,6 +1,6 @@
 {
-  "as_of_et": "2026-06-22 16:31 ET",
-  "as_of_utc": "2026-06-22T20:31:10Z",
+  "as_of_et": "2026-06-22 16:44 ET",
+  "as_of_utc": "2026-06-22T20:44:57Z",
   "amzn_price": 232.79,
   "change_pct": -4.75,
   "legs": [
@@ -11,22 +11,10 @@
       "expiry": "2026-09-18",
       "dte": 88,
       "premium_sold": 9.6,
-      "bid": 5.0,
-      "ask": 5.2,
-      "mid": 5.1,
-      "profit_pct": 46.9
-    },
-    {
-      "leg": "3M",
-      "symbol": "AMZN2621H295",
-      "strike": 295,
-      "expiry": "2026-08-21",
-      "dte": 60,
-      "premium_sold": 8.2,
-      "bid": 1.49,
-      "ask": 1.59,
-      "mid": 1.54,
-      "profit_pct": 81.2
+      "bid": 4.9,
+      "ask": 5.1,
+      "mid": 5.0,
+      "profit_pct": 47.9
     }
   ]
 }
