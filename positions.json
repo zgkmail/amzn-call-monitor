@@ -7,14 +7,5 @@
     "premium": 9.60,
     "option_symbol": "AMZN260918C275",
     "notes": "Leg 4 filled June 8 at $9.60"
-  },
-  {
-    "leg": "3m",
-    "contracts": 4,
-    "strike": 295,
-    "expiry": "2026-08-21",
-    "premium": 8.20,
-    "option_symbol": "AMZN2621H295",
-    "notes": "Leg 3 filled May 21 at $8.20"
   }
 ]
