@@ -1,20 +1,20 @@
 {
-  "as_of_et": "2026-06-22 16:44 ET",
-  "as_of_utc": "2026-06-22T20:44:57Z",
-  "amzn_price": 232.79,
-  "change_pct": -4.75,
+  "as_of_et": "2026-06-23 09:31 ET",
+  "as_of_utc": "2026-06-23T13:31:19Z",
+  "amzn_price": 233.65,
+  "change_pct": 0.37,
   "legs": [
     {
-      "leg": "4M",
+      "leg": "SEP",
       "symbol": "AMZN260918C275",
       "strike": 275,
       "expiry": "2026-09-18",
-      "dte": 88,
+      "dte": 87,
       "premium_sold": 9.6,
-      "bid": 4.9,
-      "ask": 5.1,
-      "mid": 5.0,
-      "profit_pct": 47.9
+      "bid": 0.0,
+      "ask": 0.0,
+      "mid": 0.0,
+      "profit_pct": 100.0
     }
   ]
 }
