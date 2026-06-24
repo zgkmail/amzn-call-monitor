@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-06-24 13:31 ET",
-  "as_of_utc": "2026-06-24T17:31:10Z",
-  "amzn_price": 239.4,
-  "change_pct": 2.26,
+  "as_of_et": "2026-06-24 13:52 ET",
+  "as_of_utc": "2026-06-24T17:52:29Z",
+  "amzn_price": 238.45,
+  "change_pct": 1.85,
   "legs": [
     {
       "leg": "SEP",
@@ -12,9 +12,9 @@
       "dte": 86,
       "premium_sold": 9.6,
       "bid": 6.1,
-      "ask": 6.3,
-      "mid": 6.2,
-      "profit_pct": 35.4
+      "ask": 6.25,
+      "mid": 6.17,
+      "profit_pct": 35.7
     }
   ]
 }
