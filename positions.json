@@ -1,11 +1,11 @@
 [
   {
-    "leg": "Sep",
-    "contracts": 4,
-    "strike": 275,
+    "leg": "Sep280",
+    "contracts": 6,
+    "strike": 280,
     "expiry": "2026-09-18",
-    "premium": 9.60,
-    "option_symbol": "AMZN260918C275",
-    "notes": "Sep leg filled June 8 at $9.60"
+    "premium": 4.76,
+    "option_symbol": "AMZN260918C280",
+    "notes": "Sep leg filled June 24 at $4.76"
   }
 ]
