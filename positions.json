@@ -1,5 +1,14 @@
 [
   {
+    "leg": "Aug280",
+    "contracts": 6,
+    "strike": 280,
+    "expiry": "2026-08-21",
+    "premium": 3.6,
+    "option_symbol": "AMZN2621H280",
+    "notes": "Aug leg filled June 29 at $3.6"
+  },
+  {
     "leg": "Sep280",
     "contracts": 6,
     "strike": 280,
