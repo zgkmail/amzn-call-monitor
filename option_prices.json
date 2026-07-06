@@ -1,6 +1,6 @@
 {
-  "as_of_et": "2026-07-06 16:31 ET",
-  "as_of_utc": "2026-07-06T20:31:03Z",
+  "as_of_et": "2026-07-06 17:54 ET",
+  "as_of_utc": "2026-07-06T21:54:48Z",
   "amzn_price": 244.16,
   "change_pct": 0.61,
   "legs": [
@@ -12,9 +12,9 @@
       "dte": 46,
       "premium_sold": 3.6,
       "bid": 3.65,
-      "ask": 3.75,
-      "mid": 3.7,
-      "profit_pct": -2.8
+      "ask": 3.8,
+      "mid": 3.72,
+      "profit_pct": -3.3
     },
     {
       "leg": "SEP280",
