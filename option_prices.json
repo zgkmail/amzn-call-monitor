@@ -1,6 +1,6 @@
 {
-  "as_of_et": "2026-07-20 16:18 ET",
-  "as_of_utc": "2026-07-20T20:18:57Z",
+  "as_of_et": "2026-07-20 16:31 ET",
+  "as_of_utc": "2026-07-20T20:31:02Z",
   "amzn_price": 249.99,
   "change_pct": 1.12,
   "legs": [
@@ -23,10 +23,10 @@
       "expiry": "2026-09-18",
       "dte": 60,
       "premium_sold": 4.76,
-      "bid": 5.9,
+      "bid": 5.8,
       "ask": 6.0,
-      "mid": 5.95,
-      "profit_pct": -25.0
+      "mid": 5.9,
+      "profit_pct": -23.9
     },
     {
       "leg": "OCT275",
