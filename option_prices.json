@@ -1,44 +1,44 @@
 {
-  "as_of_et": "2026-07-20 17:41 ET",
-  "as_of_utc": "2026-07-20T21:41:51Z",
-  "amzn_price": 249.99,
-  "change_pct": 1.12,
+  "as_of_et": "2026-07-21 09:31 ET",
+  "as_of_utc": "2026-07-21T13:31:01Z",
+  "amzn_price": 248.07,
+  "change_pct": -0.77,
   "legs": [
     {
       "leg": "AUG280",
       "symbol": "AMZN2621H280",
       "strike": 280,
       "expiry": "2026-08-21",
-      "dte": 32,
+      "dte": 31,
       "premium_sold": 3.6,
-      "bid": 3.3,
-      "ask": 3.5,
-      "mid": 3.4,
-      "profit_pct": 5.6
+      "bid": 0.0,
+      "ask": 0.0,
+      "mid": 0.0,
+      "profit_pct": 100.0
     },
     {
       "leg": "SEP280",
       "symbol": "AMZN260918C280",
       "strike": 280,
       "expiry": "2026-09-18",
-      "dte": 60,
+      "dte": 59,
       "premium_sold": 4.76,
-      "bid": 5.8,
-      "ask": 6.0,
-      "mid": 5.9,
-      "profit_pct": -23.9
+      "bid": 0.0,
+      "ask": 0.0,
+      "mid": 0.0,
+      "profit_pct": 100.0
     },
     {
       "leg": "OCT275",
       "symbol": "AMZN261016C275",
       "strike": 275,
       "expiry": "2026-10-16",
-      "dte": 88,
+      "dte": 87,
       "premium_sold": 5.69,
-      "bid": 9.6,
-      "ask": 9.9,
-      "mid": 9.75,
-      "profit_pct": -71.4
+      "bid": 0.0,
+      "ask": 0.0,
+      "mid": 0.0,
+      "profit_pct": 100.0
     }
   ]
 }
