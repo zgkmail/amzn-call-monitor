@@ -16,5 +16,14 @@
     "premium": 5.69,
     "option_symbol": "AMZN261016C275",
     "notes": "Oct leg filled June 25 at $5.69"
+  },
+  {
+    "leg": "Nov300",
+    "contracts": 6,
+    "strike": 300,
+    "expiry": "2026-11-20",
+    "premium": 11.30,
+    "option_symbol": "AMZN#K2026C300000",
+    "notes": "Nov leg filled July 31 at $11.30"
   }
 ]
