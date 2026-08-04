@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-08-04 15:06 ET",
-  "as_of_utc": "2026-08-04T19:06:25Z",
-  "amzn_price": 277.38,
-  "change_pct": -2.34,
+  "as_of_et": "2026-08-04 15:31 ET",
+  "as_of_utc": "2026-08-04T19:31:03Z",
+  "amzn_price": 277.33,
+  "change_pct": -2.36,
   "legs": [
     {
       "leg": "SEP280",
@@ -11,10 +11,10 @@
       "expiry": "2026-09-18",
       "dte": 45,
       "premium_sold": 4.76,
-      "bid": 12.05,
-      "ask": 12.25,
-      "mid": 12.15,
-      "profit_pct": -155.3
+      "bid": 12.2,
+      "ask": 12.45,
+      "mid": 12.32,
+      "profit_pct": -158.8
     },
     {
       "leg": "NOV300",
@@ -23,10 +23,10 @@
       "expiry": "2026-11-20",
       "dte": 108,
       "premium_sold": 11.3,
-      "bid": 14.15,
-      "ask": 14.4,
-      "mid": 14.28,
-      "profit_pct": -26.4
+      "bid": 14.4,
+      "ask": 14.6,
+      "mid": 14.5,
+      "profit_pct": -28.3
     },
     {
       "leg": "JAN310",
@@ -35,10 +35,10 @@
       "expiry": "2027-01-15",
       "dte": 164,
       "premium_sold": 19.54,
-      "bid": 15.7,
-      "ask": 15.9,
-      "mid": 15.8,
-      "profit_pct": 19.1
+      "bid": 15.8,
+      "ask": 16.0,
+      "mid": 15.9,
+      "profit_pct": 18.6
     }
   ]
 }
