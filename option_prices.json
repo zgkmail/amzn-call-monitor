@@ -1,7 +1,7 @@
 {
-  "as_of_et": "2026-08-18 10:30 ET",
-  "as_of_utc": "2026-08-18T14:30:19Z",
-  "amzn_price": 260.95,
+  "as_of_et": "2026-08-18 10:31 ET",
+  "as_of_utc": "2026-08-18T14:31:08Z",
+  "amzn_price": 261.0,
   "change_pct": 0.0,
   "legs": [
     {
@@ -23,10 +23,10 @@
       "expiry": "2026-11-20",
       "dte": 94,
       "premium_sold": 11.3,
-      "bid": 5.85,
-      "ask": 6.05,
-      "mid": 5.95,
-      "profit_pct": 47.3
+      "bid": 5.95,
+      "ask": 6.15,
+      "mid": 6.05,
+      "profit_pct": 46.5
     },
     {
       "leg": "JAN310",
