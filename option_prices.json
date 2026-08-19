@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-08-19 13:23 ET",
-  "as_of_utc": "2026-08-19T17:23:38Z",
-  "amzn_price": 264.1,
-  "change_pct": 1.79,
+  "as_of_et": "2026-08-19 13:31 ET",
+  "as_of_utc": "2026-08-19T17:31:08Z",
+  "amzn_price": 264.73,
+  "change_pct": 2.04,
   "legs": [
     {
       "leg": "SEP280",
@@ -24,9 +24,9 @@
       "dte": 93,
       "premium_sold": 11.3,
       "bid": 7.3,
-      "ask": 7.45,
-      "mid": 7.38,
-      "profit_pct": 34.7
+      "ask": 7.5,
+      "mid": 7.4,
+      "profit_pct": 34.5
     },
     {
       "leg": "JAN310",
