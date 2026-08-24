@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-08-24 13:31 ET",
-  "as_of_utc": "2026-08-24T17:31:08Z",
-  "amzn_price": 261.85,
-  "change_pct": 1.25,
+  "as_of_et": "2026-08-24 13:59 ET",
+  "as_of_utc": "2026-08-24T17:59:13Z",
+  "amzn_price": 261.99,
+  "change_pct": 1.3,
   "legs": [
     {
       "leg": "SEP280",
@@ -11,10 +11,10 @@
       "expiry": "2026-09-18",
       "dte": 25,
       "premium_sold": 4.76,
-      "bid": 2.34,
-      "ask": 2.44,
-      "mid": 2.39,
-      "profit_pct": 49.8
+      "bid": 2.3,
+      "ask": 2.37,
+      "mid": 2.33,
+      "profit_pct": 51.1
     },
     {
       "leg": "NOV300",
@@ -23,10 +23,10 @@
       "expiry": "2026-11-20",
       "dte": 88,
       "premium_sold": 11.3,
-      "bid": 6.5,
-      "ask": 6.8,
-      "mid": 6.65,
-      "profit_pct": 41.2
+      "bid": 6.3,
+      "ask": 6.55,
+      "mid": 6.42,
+      "profit_pct": 43.2
     }
   ]
 }
