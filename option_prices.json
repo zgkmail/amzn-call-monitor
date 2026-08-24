@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-08-24 15:31 ET",
-  "as_of_utc": "2026-08-24T19:31:07Z",
-  "amzn_price": 262.11,
-  "change_pct": 1.35,
+  "as_of_et": "2026-08-24 15:55 ET",
+  "as_of_utc": "2026-08-24T19:55:38Z",
+  "amzn_price": 262.21,
+  "change_pct": 1.38,
   "legs": [
     {
       "leg": "SEP280",
@@ -12,9 +12,9 @@
       "dte": 25,
       "premium_sold": 4.76,
       "bid": 2.3,
-      "ask": 2.34,
-      "mid": 2.32,
-      "profit_pct": 51.3
+      "ask": 2.35,
+      "mid": 2.33,
+      "profit_pct": 51.1
     },
     {
       "leg": "NOV300",
@@ -24,9 +24,9 @@
       "dte": 88,
       "premium_sold": 11.3,
       "bid": 6.35,
-      "ask": 6.55,
-      "mid": 6.45,
-      "profit_pct": 42.9
+      "ask": 6.5,
+      "mid": 6.42,
+      "profit_pct": 43.2
     }
   ]
 }
