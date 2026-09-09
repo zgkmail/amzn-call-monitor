@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-09-09 15:31 ET",
-  "as_of_utc": "2026-09-09T19:31:05Z",
-  "amzn_price": 252.15,
-  "change_pct": -1.88,
+  "as_of_et": "2026-09-09 15:56 ET",
+  "as_of_utc": "2026-09-09T19:56:17Z",
+  "amzn_price": 252.31,
+  "change_pct": -1.81,
   "legs": [
     {
       "leg": "NOV300",
@@ -12,9 +12,9 @@
       "dte": 72,
       "premium_sold": 11.3,
       "bid": 3.85,
-      "ask": 3.85,
-      "mid": 3.85,
-      "profit_pct": 65.9
+      "ask": 3.95,
+      "mid": 3.9,
+      "profit_pct": 65.5
     }
   ]
 }
