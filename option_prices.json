@@ -1,6 +1,6 @@
 {
-  "as_of_et": "2026-09-28 16:31 ET",
-  "as_of_utc": "2026-09-28T20:31:04Z",
+  "as_of_et": "2026-09-28 20:19 ET",
+  "as_of_utc": "2026-09-29T00:19:19Z",
   "amzn_price": 246.15,
   "change_pct": -1.41,
   "legs": [
@@ -9,7 +9,7 @@
       "symbol": "AMZN#K2026C300000",
       "strike": 300,
       "expiry": "2026-11-20",
-      "dte": 53,
+      "dte": 52,
       "premium_sold": 11.3,
       "bid": 1.67,
       "ask": 1.77,
