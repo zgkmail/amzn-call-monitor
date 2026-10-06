@@ -1,5 +1,11 @@
 [
   {
-
+    "leg": "Nov280",
+    "contracts": 6,
+    "strike": 280,
+    "expiry": "2026-11-20",
+    "premium": 5.50,
+    "option_symbol": "AMZN#K2026C280000",
+    "notes": "Nov leg filled Oct 06 at $5.50"
   }
 ]
