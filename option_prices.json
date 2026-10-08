@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-10-08 11:30 ET",
-  "as_of_utc": "2026-10-08T15:30:57Z",
-  "amzn_price": 258.55,
-  "change_pct": -0.53,
+  "as_of_et": "2026-10-08 12:31 ET",
+  "as_of_utc": "2026-10-08T16:31:06Z",
+  "amzn_price": 258.95,
+  "change_pct": -0.37,
   "legs": [
     {
       "leg": "NOV280",
@@ -11,10 +11,10 @@
       "expiry": "2026-11-20",
       "dte": 43,
       "premium_sold": 5.5,
-      "bid": 6.2,
-      "ask": 6.4,
-      "mid": 6.3,
-      "profit_pct": -14.5
+      "bid": 5.9,
+      "ask": 6.1,
+      "mid": 6.0,
+      "profit_pct": -9.1
     }
   ]
 }
