@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-10-08 10:30 ET",
-  "as_of_utc": "2026-10-08T14:30:58Z",
-  "amzn_price": 259.37,
-  "change_pct": -0.21,
+  "as_of_et": "2026-10-08 11:30 ET",
+  "as_of_utc": "2026-10-08T15:30:57Z",
+  "amzn_price": 258.55,
+  "change_pct": -0.53,
   "legs": [
     {
       "leg": "NOV280",
@@ -12,9 +12,9 @@
       "dte": 43,
       "premium_sold": 5.5,
       "bid": 6.2,
-      "ask": 6.35,
-      "mid": 6.28,
-      "profit_pct": -14.2
+      "ask": 6.4,
+      "mid": 6.3,
+      "profit_pct": -14.5
     }
   ]
 }
