@@ -1,20 +1,20 @@
 {
-  "as_of_et": "2026-10-23 16:58 ET",
-  "as_of_utc": "2026-10-23T20:58:41Z",
-  "amzn_price": 248.0,
-  "change_pct": -0.95,
+  "as_of_et": "2026-10-26 09:31 ET",
+  "as_of_utc": "2026-10-26T13:31:13Z",
+  "amzn_price": 248.91,
+  "change_pct": 0.37,
   "legs": [
     {
       "leg": "NOV280",
       "symbol": "AMZN#K2026C280000",
       "strike": 280,
       "expiry": "2026-11-20",
-      "dte": 28,
+      "dte": 25,
       "premium_sold": 5.5,
-      "bid": 2.7,
-      "ask": 2.79,
-      "mid": 2.75,
-      "profit_pct": 50.0
+      "bid": 2.64,
+      "ask": 3.65,
+      "mid": 3.15,
+      "profit_pct": 42.7
     }
   ]
 }
