@@ -5,7 +5,7 @@
     "strike": 290,
     "expiry": "2026-12-18",
     "premium": 4.60,
-    "option_symbol": "AMZN26C1218C290",
-    "notes": "Dec leg filled Nov 04 at $4.60"
+    "option_symbol": "AMZN261218C290",
+    "notes": "Dec leg filled Nov 04 at $4.60; GTC BTC at $0.92"
   }
 ]
