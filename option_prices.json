@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-11-05 09:31 ET",
-  "as_of_utc": "2026-11-05T14:31:21Z",
-  "amzn_price": 271.2,
-  "change_pct": 1.94,
+  "as_of_et": "2026-11-05 10:31 ET",
+  "as_of_utc": "2026-11-05T15:31:15Z",
+  "amzn_price": 257.31,
+  "change_pct": -3.28,
   "legs": [
     {
       "leg": "DEC290",
@@ -11,10 +11,10 @@
       "expiry": "2026-12-18",
       "dte": 43,
       "premium_sold": 4.6,
-      "bid": 4.3,
-      "ask": 5.2,
-      "mid": 4.75,
-      "profit_pct": -3.3
+      "bid": 2.72,
+      "ask": 2.82,
+      "mid": 2.77,
+      "profit_pct": 39.8
     }
   ]
 }
