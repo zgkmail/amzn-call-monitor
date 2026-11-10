@@ -1,7 +1,7 @@
 {
-  "as_of_et": "2026-11-10 11:31 ET",
-  "as_of_utc": "2026-11-10T16:31:14Z",
-  "amzn_price": 269.2,
+  "as_of_et": "2026-11-10 12:31 ET",
+  "as_of_utc": "2026-11-10T17:31:12Z",
+  "amzn_price": 269.19,
   "change_pct": 0.85,
   "legs": [
     {
@@ -11,10 +11,10 @@
       "expiry": "2026-12-18",
       "dte": 38,
       "premium_sold": 4.6,
-      "bid": 4.05,
-      "ask": 4.25,
-      "mid": 4.15,
-      "profit_pct": 9.8
+      "bid": 3.85,
+      "ask": 4.0,
+      "mid": 3.92,
+      "profit_pct": 14.8
     }
   ]
 }
