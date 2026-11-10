@@ -7,5 +7,14 @@
     "premium": 4.60,
     "option_symbol": "AMZN261218C290",
     "notes": "Dec leg filled Nov 04 at $4.60; GTC BTC at $0.92"
+  },
+  {
+    "leg": "Jan300",
+    "contracts": 6,
+    "strike": 300,
+    "expiry": "2027-01-15",
+    "premium": 5.00,
+    "option_symbol": "AMZN270115C300",
+    "notes": "Jan leg filled Nov 10 at $5.00; GTC BTC at $1.00"
   }
 ]
