@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-11-10 12:31 ET",
-  "as_of_utc": "2026-11-10T17:31:12Z",
-  "amzn_price": 269.19,
-  "change_pct": 0.85,
+  "as_of_et": "2026-11-10 13:31 ET",
+  "as_of_utc": "2026-11-10T18:31:18Z",
+  "amzn_price": 268.8,
+  "change_pct": 0.7,
   "legs": [
     {
       "leg": "DEC290",
