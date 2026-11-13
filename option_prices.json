@@ -1,32 +1,32 @@
 {
-  "as_of_et": "2026-11-12 15:38 ET",
-  "as_of_utc": "2026-11-12T20:38:21Z",
-  "amzn_price": 268.01,
-  "change_pct": 0.69,
+  "as_of_et": "2026-11-13 08:31 ET",
+  "as_of_utc": "2026-11-13T13:31:09Z",
+  "amzn_price": 267.44,
+  "change_pct": 0.48,
   "legs": [
     {
       "leg": "DEC290",
       "symbol": "AMZN261218C290",
       "strike": 290,
       "expiry": "2026-12-18",
-      "dte": 36,
+      "dte": 35,
       "premium_sold": 4.6,
-      "bid": 3.45,
-      "ask": 3.55,
-      "mid": 3.5,
-      "profit_pct": 23.9
+      "bid": 3.65,
+      "ask": 4.35,
+      "mid": 4.0,
+      "profit_pct": 13.0
     },
     {
       "leg": "JAN300",
       "symbol": "AMZN270115C300",
       "strike": 300,
       "expiry": "2027-01-15",
-      "dte": 64,
+      "dte": 63,
       "premium_sold": 5.0,
-      "bid": 4.3,
-      "ask": 4.35,
-      "mid": 4.32,
-      "profit_pct": 13.6
+      "bid": 4.45,
+      "ask": 5.15,
+      "mid": 4.8,
+      "profit_pct": 4.0
     }
   ]
 }
