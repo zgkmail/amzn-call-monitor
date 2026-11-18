@@ -1,6 +1,6 @@
 {
-  "as_of_et": "2026-11-17 16:29 ET",
-  "as_of_utc": "2026-11-17T21:29:34Z",
+  "as_of_et": "2026-11-18 08:31 ET",
+  "as_of_utc": "2026-11-18T13:31:13Z",
   "amzn_price": 257.89,
   "change_pct": 0.05,
   "legs": [
@@ -9,12 +9,12 @@
       "symbol": "AMZN270115C300",
       "strike": 300,
       "expiry": "2027-01-15",
-      "dte": 59,
+      "dte": 58,
       "premium_sold": 5.0,
-      "bid": 2.42,
-      "ask": 2.57,
-      "mid": 2.5,
-      "profit_pct": 50.0
+      "bid": 2.05,
+      "ask": 3.0,
+      "mid": 2.52,
+      "profit_pct": 49.6
     }
   ]
 }
