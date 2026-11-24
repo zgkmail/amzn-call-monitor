@@ -1,8 +1,8 @@
 {
-  "as_of_et": "2026-11-24 13:31 ET",
-  "as_of_utc": "2026-11-24T18:31:08Z",
-  "amzn_price": 252.43,
-  "change_pct": -1.16,
+  "as_of_et": "2026-11-24 14:31 ET",
+  "as_of_utc": "2026-11-24T19:31:13Z",
+  "amzn_price": 252.4,
+  "change_pct": -1.17,
   "legs": [
     {
       "leg": "JAN300",
@@ -11,10 +11,10 @@
       "expiry": "2027-01-15",
       "dte": 52,
       "premium_sold": 5.0,
-      "bid": 1.25,
-      "ask": 1.33,
-      "mid": 1.29,
-      "profit_pct": 74.2
+      "bid": 1.21,
+      "ask": 1.26,
+      "mid": 1.23,
+      "profit_pct": 75.4
     }
   ]
 }
